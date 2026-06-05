@@ -9,7 +9,7 @@ def test_trimixblend(start, finish, he):
     print()
 
 def test_topup(start_gas, topup_gas):
-    mix_gas = TopupBlend(start_gas, topup_gas)
+    mix_gas = topup_blend(start_gas, topup_gas)
     print(f"Start: {start_gas}")
     print(f"Topup: {topup_gas}")
     print(f"Result:{mix_gas}")

@@ -18,35 +18,35 @@ class GasBlenderTestCases(unittest.TestCase):
 
     def test_topup_mix_mix(self):
         expected = Gas(250, 13.9, 45.2)
-        result = TopupBlend(b_half_1840, b_full_1050)
+        result = topup_blend(b_half_1840, b_full_1050)
         self.assertAlmostEqual(result.o2, expected.o2, 0)
         self.assertAlmostEqual(result.he, expected.he, 0)
         self.assertAlmostEqual(result.bar, expected.bar, 0)
 
     def test_topup_mix_air(self):
         expected = Gas(250, 19.6, 19.3)
-        result = TopupBlend(b_half_1840, b_full_air)
+        result = topup_blend(b_half_1840, b_full_air)
         self.assertAlmostEqual(result.o2, expected.o2, 0)
         self.assertAlmostEqual(result.he, expected.he, 0)
         self.assertAlmostEqual(result.bar, expected.bar, 0)
 
     def test_topup_mix2_air(self):
         expected = Gas(250, 21.5, 24.1)
-        result = TopupBlend(b_half_2250, b_full_air)
+        result = topup_blend(b_half_2250, b_full_air)
         self.assertAlmostEqual(result.o2, expected.o2, 0)
         self.assertAlmostEqual(result.he, expected.he, 0)
         self.assertAlmostEqual(result.bar, expected.bar, 0)
 
     def test_topup_air_air(self):
         expected = Gas(250, 21, 0)
-        result = TopupBlend(b_empty_air, b_full_air)
+        result = topup_blend(b_empty_air, b_full_air)
         self.assertAlmostEqual(result.o2, expected.o2, 0)
         self.assertAlmostEqual(result.he, expected.he, 0)
         self.assertAlmostEqual(result.bar, expected.bar, 0)
 
     def test_topup_min_air_half_2250(self):
         expected = Gas(120, 21.6, 28.9)
-        result = TopupBlend(b_min_air, b_half_2250)
+        result = topup_blend(b_min_air, b_half_2250)
         self.assertAlmostEqual(result.o2, expected.o2, 0)
         self.assertAlmostEqual(result.he, expected.he, 0)
         self.assertAlmostEqual(result.bar, expected.bar, 0)
