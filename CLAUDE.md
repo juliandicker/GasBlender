@@ -36,7 +36,7 @@ python -m http.server 8080            # frontend on :8080
 ```
 
 ### CORS
-`local.settings.json` configures CORS to allow `http://localhost:8080`. This file is gitignored.
+`local.settings.json` configures CORS to allow `http://localhost:8080`. This file is gitignored to prevent accidental secret commits — copy `local.settings.example.json` to get started.
 
 ### Tests
 ```bash
