@@ -1,5 +1,6 @@
 import json
 
+
 class Gas:
     def __init__(self, bar, o2, he):
         self.bar = bar
@@ -11,7 +12,7 @@ class Gas:
         self.bar_n2 = (self.bar + 1) * self.n2 / 100
 
     def __str__(self):
-         return f"{self.bar:.1f} bar {self.short_name()}"
+        return f"{self.bar:.1f} bar {self.short_name()}"
 
     def short_name(self):
         if self.o2 == 100:
@@ -25,21 +26,23 @@ class Gas:
         else:
             return f"{self.o2:.1f}/{self.he:.1f}"
 
+
 class BlendStep:
     def __init__(self, name, start_gas, result_gas):
         self.name = name
         self.start_gas = start_gas
         self.result_gas = result_gas
-    
+
     def __str__(self):
         diff = self.result_gas.bar - self.start_gas.bar
         return f"{self.name}\t{self.start_gas.bar:.1f}\t{self.result_gas.bar:.1f} ({diff:.1f})\t{self.result_gas}"
 
+
 class TrimixBlend:
-    def __init__(self, start_gas, finish_gas, he_gas = Gas(250, 0, 100)):
+    def __init__(self, start_gas, finish_gas, he_gas=None):
         self.start_gas = start_gas
         self.finish_gas = finish_gas
-        self.he_gas = he_gas
+        self.he_gas = he_gas if he_gas is not None else Gas(250, 0, 100)
         self.blend()
 
     def __str__(self):
@@ -58,9 +61,8 @@ class TrimixBlend:
         else:
             self.step_he(self.he_gas.short_name(), self.start_gas, self.he_gas)
             self.step_o2(self.steps[-1].result_gas)
-
         self.step_air()
-    
+
     def step_he(self, name, start_gas, he_gas):
         if he_gas.he == 0:
             raise ValueError(f"Helium bank '{name}' contains 0% helium")
@@ -68,10 +70,8 @@ class TrimixBlend:
         he_required = start_gas.bar + bar_p > he_gas.bar
         if he_required:
             bar_p = he_gas.bar - start_gas.bar
-
         target_he = start_gas.bar + bar_p
         self.add_step(name, start_gas, Gas(round(target_he, 1), he_gas.o2, he_gas.he))
-
         if he_required:
             self.step_he("He", self.steps[-1].result_gas, Gas(250, 0, 100))
 
@@ -84,9 +84,10 @@ class TrimixBlend:
         self.add_step("Air", self.steps[-1].result_gas, Gas(round(target_air, 1), 21, 0))
 
     def add_step(self, name, start_gas, topup_gas):
-        self.steps.append(BlendStep(name, start_gas, TopupBlend(start_gas, topup_gas)))
+        self.steps.append(BlendStep(name, start_gas, topup_blend(start_gas, topup_gas)))
 
-def TopupBlend(start_gas, topup_gas, bar = None):
+
+def topup_blend(start_gas, topup_gas, bar=None):
     bar = topup_gas.bar if bar is None else bar
     o2 = round((((start_gas.o2 / 100) * start_gas.bar) + ((topup_gas.bar - start_gas.bar) * (topup_gas.o2 / 100))) / topup_gas.bar * 100, 1)
     he = round((((start_gas.he / 100) * start_gas.bar) + ((topup_gas.bar - start_gas.bar) * (topup_gas.he / 100))) / topup_gas.bar * 100, 1)

@@ -55,9 +55,9 @@ The `gas/index.html` file is a single-page web UI (jQuery + Bootstrap 5) hosted 
   "finish_bar": 200,
   "finish_o2": 21,
   "finish_he": 35,
-  "he_bar": 300,
-  "he_o2": 0,
-  "he_he": 100
+  "helium_bar": 300,
+  "helium_o2": 0,
+  "helium_he": 100
 }
 ```
 
