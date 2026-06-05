@@ -3,10 +3,14 @@
 	"tasks": [
 		{
 			"type": "func",
+			"label": "func: host start",
 			"command": "host start",
 			"problemMatcher": "$func-python-watch",
 			"isBackground": true,
-			"dependsOn": "pip install (functions)"
+			"dependsOn": "pip install (functions)",
+			"options": {
+				"cwd": "${workspaceFolder}/gasblender"
+			}
 		},
 		{
 			"label": "pip install (functions)",
@@ -20,7 +24,10 @@
 			"linux": {
 				"command": "${config:azureFunctions.pythonVenv}/bin/python -m pip install -r requirements.txt"
 			},
-			"problemMatcher": []
+			"problemMatcher": [],
+			"options": {
+				"cwd": "${workspaceFolder}/gasblender"
+			}
 		}
 	]
 }

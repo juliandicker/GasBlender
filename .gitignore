@@ -41,7 +41,6 @@ __queuestorage__/
 __azurite_db*__.json
 
 # VS Code
-.vscode/
 
 # OS
 .DS_Store
