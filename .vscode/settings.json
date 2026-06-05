@@ -1,5 +1,5 @@
 {
-    "azureFunctions.deploySubpath": "gasblender",
+    "azureFunctions.deploySubpath": ".",
     "azureFunctions.scmDoBuildDuringDeployment": true,
     "azureFunctions.pythonVenv": ".venv",
     "azureFunctions.projectLanguage": "Python",
@@ -8,7 +8,7 @@
     "python.testing.unittestArgs": [
         "-v",
         "-s",
-        "./gas",
+        ".",
         "-p",
         "test_*.py"
     ],

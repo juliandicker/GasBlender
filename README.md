@@ -19,18 +19,14 @@ The project has two parts:
 
 ```
 GasBlender/
-├── gas/              # Standalone Python library (core logic)
-│   ├── gasblender.py       # Gas, BlendStep, TrimixBlend classes
-│   ├── test_gasblender.py  # Unit tests (unittest)
-│   ├── demo_gasblender.py  # Usage examples
-│   └── index.html          # Static web UI
-│
-└── gasblender/       # Azure Functions deployment wrapper
-    ├── TrimixBlend/
-    │   ├── __init__.py     # HTTP trigger endpoint
-    │   └── function.json   # Binding config (HTTP GET/POST)
-    ├── host.json
-    └── requirements.txt
+├── TrimixBlend/
+│   ├── __init__.py     # HTTP trigger endpoint
+│   └── function.json   # Binding config (HTTP GET/POST)
+├── gas_blender.py      # Core gas blending logic (Gas, TrimixBlend, topup_blend)
+├── test_gas_blender.py # Unit tests (unittest)
+├── index.html          # Static web UI (hosted on Azure Blob Storage)
+├── host.json
+└── requirements.txt
 ```
 
 ### Backend — Azure Function App
