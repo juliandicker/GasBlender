@@ -36,11 +36,15 @@ bin/
 obj/
 
 # Azurite (local storage emulator)
+.azurite/
 __blobstorage__/
 __queuestorage__/
 __azurite_db*__.json
 
 # VS Code
+
+# Screenshots
+.screenshots/
 
 # OS
 .DS_Store
