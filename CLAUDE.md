@@ -10,12 +10,18 @@ Trimix gas blending calculator for technical diving. Python Azure Function API +
 GasBlender/
 ├── TrimixBlend/__init__.py   # Azure HTTP trigger
 ├── TrimixBlend/function.json # Binding config
-├── tests/                    # Unit tests (unittest)
+├── tests/                    # Unit tests (pytest)
 ├── gas_blender.py            # Core logic — single source of truth
 ├── index.html                # Web UI (deployed to Azure Blob Storage, not Function App)
 ├── host.json                 # Azure Functions runtime config
 ├── requirements.txt          # Pinned dependencies
-└── .funcignore               # Excludes tests/, index.html, README.md from deployment
+├── .funcignore               # Excludes tests/, index.html, README.md from deployment
+└── infra/
+    ├── main.bicep            # Subscription-scoped orchestration — creates resource group + all resources
+    ├── main.bicepparam       # Parameter values (appName, environment, location, resourceGroupName)
+    └── modules/
+        ├── storage.bicep     # StorageV2 storage account (Function App storage + static website)
+        └── functionApp.bicep # Log Analytics → App Insights → FC1 plan → Function App
 ```
 
 ## Local development
@@ -55,16 +61,36 @@ pytest tests/ -v
 
 ## Deployment
 
-| Component | Target | How |
-|-----------|--------|-----|
-| API | Azure Function App | VS Code Azure extension or `func azure functionapp publish` |
-| Frontend | Azure Blob Storage static website | Upload `index.html` manually or via Azure CLI |
+Push to `main` — GitHub Actions handles everything in order:
+
+1. **Test** — pytest
+2. **Deploy Infrastructure** — `az deployment sub create` with Bicep (idempotent)
+3. **Deploy Function App** + **Deploy Static Website** — run in parallel
+
+CI/CD uses OIDC federated identity (no stored secrets beyond `AZURE_CLIENT_ID`, `AZURE_TENANT_ID`, `AZURE_SUBSCRIPTION_ID`).
 
 The `index.html` environment selector auto-detects local vs production based on hostname — no changes needed between environments.
 
-## Azure config
+To test Bicep changes locally before pushing:
+```bash
+az bicep build --file infra/main.bicep                          # syntax check
+az deployment sub what-if --location northeurope \              # dry run
+  --template-file infra/main.bicep \
+  --parameters infra/main.bicepparam
+```
 
-- Extension bundle: `[4.*, 5.0.0)` (host.json)
-- Python runtime: v4
+## Azure resources
+
+| Resource | Name | Notes |
+|---|---|---|
+| Resource group | `rg-gasblender-prod` | North Europe |
+| Storage account | `stgasblendertcif7s` | Static website + Function App storage |
+| Function App | `gasblender-tcif7s` | Flex Consumption (FC1), Python 3.11, 512 MB |
+| App Service Plan | `asp-gasblender-prod` | FC1 / FlexConsumption |
+| App Insights | `appi-gasblender-prod` | Workspace-based |
+| Log Analytics | `log-gasblender-prod` | 30-day retention |
+
+- Static website: `https://stgasblendertcif7s.z16.web.core.windows.net/`
+- API endpoint: `https://gasblender-tcif7s.azurewebsites.net/api/TrimixBlend`
 - Function auth: anonymous (no API key required)
-- Application Insights: enabled with request sampling excluded
+- Extension bundle: `[4.*, 5.0.0)` (host.json)

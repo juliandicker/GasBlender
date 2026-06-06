@@ -21,7 +21,11 @@ GasBlender/
 │   ├── __init__.py     # Azure HTTP trigger — parses request, calls gas_blender
 │   └── function.json   # Binding config (HTTP POST)
 ├── tests/
-│   └── test_gas_blender.py  # Unit tests (28 tests, unittest)
+│   └── test_gas_blender.py  # Unit tests (28 tests, pytest)
+├── infra/
+│   ├── main.bicep      # Subscription-scoped Bicep — creates resource group + all resources
+│   ├── main.bicepparam # Parameter values
+│   └── modules/        # storage.bicep, functionApp.bicep
 ├── gas_blender.py      # Core logic: Gas, BlendStep, TrimixBlend, topup_blend
 ├── index.html          # Static web UI (hosted on Azure Blob Storage)
 ├── host.json           # Azure Functions runtime config
@@ -29,20 +33,20 @@ GasBlender/
 └── .funcignore         # Excludes tests/, index.html etc from Azure deployment
 ```
 
-The repo root is the Azure Function app — deploy it directly with the Azure Functions Core Tools or VS Code extension.
+Deployment is fully automated via GitHub Actions — push to `main` to deploy.
 
 ## Hosting
 
-| Component | Azure service |
-|-----------|--------------|
-| API | Azure Function App (`gasblender.azurewebsites.net`) |
-| Frontend | Azure Blob Storage static website |
+| Component | Azure service | URL |
+|-----------|--------------|-----|
+| API | Azure Function App (Flex Consumption) | `https://gasblender-tcif7s.azurewebsites.net/api/TrimixBlend` |
+| Frontend | Azure Blob Storage static website | `https://stgasblendertcif7s.z16.web.core.windows.net/` |
+
+Infrastructure is defined in `infra/` as Bicep (subscription-scoped) and deployed via GitHub Actions on every push to `main`.
 
 ### Backend
 
 `TrimixBlend/__init__.py` is a Python Azure Functions v4 HTTP trigger. It accepts a JSON body, runs the blend calculation, and returns the result as JSON.
-
-Endpoint: `https://gasblender.azurewebsites.net/api/TrimixBlend`
 
 ### Frontend
 
@@ -50,7 +54,7 @@ Endpoint: `https://gasblender.azurewebsites.net/api/TrimixBlend`
 
 ## API
 
-**POST** `https://gasblender.azurewebsites.net/api/TrimixBlend`
+**POST** `https://gasblender-tcif7s.azurewebsites.net/api/TrimixBlend`
 
 All pressures in bar, gas percentages as integers (0–100).
 
@@ -103,7 +107,9 @@ If the helium bank runs short during a trimix blend, the calculator adds a secon
 ## Tech stack
 
 - Python 3
-- Azure Functions (Python v4 runtime, extension bundle 4.x)
+- Azure Functions (Python v4 runtime, Flex Consumption plan)
 - Azure Blob Storage (static website hosting)
-- Application Insights (telemetry sampling)
+- Application Insights + Log Analytics (telemetry)
+- Bicep (IaC — subscription-scoped, deploys all resources)
+- GitHub Actions + OIDC (CI/CD — no stored credentials)
 - jQuery 3.6.0 + Bootstrap 5.2.0
