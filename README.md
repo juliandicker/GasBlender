@@ -43,7 +43,7 @@ Deployment is fully automated via GitHub Actions — push to `main` to deploy.
 | Component | Azure service | URL |
 |-----------|--------------|-----|
 | API | Azure Function App (Flex Consumption) | [https://gasblender-tcif7s.azurewebsites.net/api/TrimixBlend](https://gasblender-tcif7s.azurewebsites.net/api/TrimixBlend) |
-| Frontend | Azure CDN → Blob Storage static website | [https://gasblender.redkic.co.uk/](https://gasblender.redkic.co.uk/) |
+| Frontend | Azure Static Web Apps (Free) | [https://gasblender.redkic.co.uk/](https://gasblender.redkic.co.uk/) |
 
 Infrastructure is defined in `infra/` as Bicep (subscription-scoped) and deployed via GitHub Actions on every push to `main`.
 
@@ -111,7 +111,8 @@ If the helium bank runs short during a trimix blend, the calculator adds a secon
 
 - Python 3
 - Azure Functions (Python v4 runtime, Flex Consumption plan)
-- Azure Blob Storage (static website hosting) + Azure CDN (custom domain, HTTPS)
+- Azure Blob Storage (Function App storage)
+- Azure Static Web Apps — Free tier (static website hosting, custom domain, HTTPS)
 - Application Insights + Log Analytics (telemetry)
 - Bicep (IaC — subscription-scoped, deploys all resources)
 - GitHub Actions + OIDC (CI/CD — no stored credentials)

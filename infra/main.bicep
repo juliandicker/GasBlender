@@ -14,8 +14,7 @@ resource rg 'Microsoft.Resources/resourceGroups@2022-09-01' = {
 
 var resourceToken = take(uniqueString(rg.id), 6)
 var storageAccountName = toLower('st${replace(appName, '-', '')}${resourceToken}')
-var afdProfileName = 'afd-${appName}-${environment}'
-var afdEndpointName = '${appName}-${resourceToken}'
+var staticWebAppName = '${appName}-${resourceToken}'
 
 module storage 'modules/storage.bicep' = {
   name: 'storage-deploy'
@@ -37,14 +36,12 @@ module app 'modules/functionApp.bicep' = {
   }
 }
 
-module cdn 'modules/cdn.bicep' = {
-  name: 'cdn-deploy'
+module swa 'modules/staticWebApp.bicep' = {
+  name: 'swa-deploy'
   scope: rg
   params: {
-    afdProfileName: afdProfileName
-    afdEndpointName: afdEndpointName
-    storageStaticWebHostname: storage.outputs.staticWebsiteHostname
-    customDomainHostname: customDomainHostname
+    staticWebAppName: staticWebAppName
+    location: location
   }
 }
 
@@ -52,11 +49,20 @@ module dns 'modules/dns.bicep' = {
   name: 'dns-deploy'
   scope: resourceGroup(dnsResourceGroupName)
   params: {
-    cdnEndpointHostname: cdn.outputs.afdEndpointHostname
+    targetHostname: swa.outputs.defaultHostname
   }
+}
+
+module swaDomain 'modules/swa-domain.bicep' = {
+  name: 'swa-domain-deploy'
+  scope: rg
+  params: {
+    staticWebAppName: swa.outputs.staticWebAppName
+    customDomainHostname: customDomainHostname
+  }
+  dependsOn: [dns]
 }
 
 output storageAccountName string = storage.outputs.storageAccountName
 output functionAppName string = app.outputs.functionAppName
-output cdnProfileName string = cdn.outputs.afdProfileName
-output cdnEndpointName string = cdn.outputs.afdEndpointName
+output staticWebAppName string = swa.outputs.staticWebAppName

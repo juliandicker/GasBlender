@@ -1,4 +1,4 @@
-param cdnEndpointHostname string
+param targetHostname string
 param subDomainLabel string = 'gasblender'
 param dnsZoneName string = 'redkic.co.uk'
 
@@ -12,7 +12,7 @@ resource cnameRecord 'Microsoft.Network/dnsZones/CNAME@2018-05-01' = {
   properties: {
     TTL: 3600
     CNAMERecord: {
-      cname: cdnEndpointHostname
+      cname: targetHostname
     }
   }
 }

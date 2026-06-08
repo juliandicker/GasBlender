@@ -36,8 +36,7 @@ jobs:
     outputs:
       storageAccountName: ${{ steps.bicep.outputs.storageAccountName }}
       functionAppName: ${{ steps.bicep.outputs.functionAppName }}
-      cdnProfileName: ${{ steps.bicep.outputs.cdnProfileName }}
-      cdnEndpointName: ${{ steps.bicep.outputs.cdnEndpointName }}
+      staticWebAppName: ${{ steps.bicep.outputs.staticWebAppName }}
     steps:
       - uses: actions/checkout@v6
 
@@ -58,8 +57,7 @@ jobs:
             --output json)
           echo "storageAccountName=$(echo $output | jq -r '.storageAccountName.value')" >> $GITHUB_OUTPUT
           echo "functionAppName=$(echo $output | jq -r '.functionAppName.value')" >> $GITHUB_OUTPUT
-          echo "cdnProfileName=$(echo $output | jq -r '.cdnProfileName.value')" >> $GITHUB_OUTPUT
-          echo "cdnEndpointName=$(echo $output | jq -r '.cdnEndpointName.value')" >> $GITHUB_OUTPUT
+          echo "staticWebAppName=$(echo $output | jq -r '.staticWebAppName.value')" >> $GITHUB_OUTPUT
 
   deploy-function:
     name: Deploy Function App
@@ -99,37 +97,19 @@ jobs:
           tenant-id: ${{ secrets.AZURE_TENANT_ID }}
           subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
 
-      - name: Enable static website and upload
-        env:
-          STORAGE_ACCOUNT: ${{ needs.infra.outputs.storageAccountName }}
+      - name: Get SWA deployment token
+        id: swa_token
         run: |
-          STORAGE_KEY=$(az storage account keys list \
+          token=$(az staticwebapp secrets list \
+            --name ${{ needs.infra.outputs.staticWebAppName }} \
             --resource-group rg-gasblender-prod \
-            --account-name $STORAGE_ACCOUNT \
-            --query '[0].value' -o tsv)
+            --query 'properties.apiKey' -o tsv)
+          echo "token=$token" >> $GITHUB_OUTPUT
 
-          az storage blob service-properties update \
-            --account-name $STORAGE_ACCOUNT \
-            --static-website \
-            --index-document index.html \
-            --404-document index.html \
-            --account-key $STORAGE_KEY
-
-          az storage blob upload-batch \
-            --account-name $STORAGE_ACCOUNT \
-            --destination '$web' \
-            --source web/ \
-            --overwrite \
-            --account-key $STORAGE_KEY
-
-      - name: Purge CDN cache
-        env:
-          RESOURCE_GROUP: rg-gasblender-prod
-          CDN_PROFILE: ${{ needs.infra.outputs.cdnProfileName }}
-          CDN_ENDPOINT: ${{ needs.infra.outputs.cdnEndpointName }}
-        run: |
-          az afd endpoint purge \
-            --resource-group $RESOURCE_GROUP \
-            --profile-name $CDN_PROFILE \
-            --endpoint-name $CDN_ENDPOINT \
-            --content-paths '/*'
+      - name: Deploy to Static Web App
+        uses: Azure/static-web-apps-deploy@v1
+        with:
+          azure_static_web_apps_api_token: ${{ steps.swa_token.outputs.token }}
+          action: upload
+          app_location: web
+          skip_app_build: true

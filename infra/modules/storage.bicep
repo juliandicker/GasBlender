@@ -12,9 +12,8 @@ resource storageAccount 'Microsoft.Storage/storageAccounts@2023-01-01' = {
     accessTier: 'Hot'
     supportsHttpsTrafficOnly: true
     minimumTlsVersion: 'TLS1_2'
-    allowBlobPublicAccess: true
+    allowBlobPublicAccess: false
   }
 }
 
 output storageAccountName string = storageAccount.name
-output staticWebsiteHostname string = replace(replace(storageAccount.properties.primaryEndpoints.web, 'https://', ''), '/', '')

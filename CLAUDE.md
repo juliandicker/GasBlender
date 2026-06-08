@@ -2,7 +2,7 @@
 
 ## Project overview
 
-Trimix gas blending calculator for technical diving. Python Azure Function API + static HTML frontend hosted on Azure Blob Storage.
+Trimix gas blending calculator for technical diving. Python Azure Function API + static HTML frontend hosted on Azure Static Web Apps (Free tier).
 
 ## Structure
 
@@ -26,8 +26,9 @@ GasBlender/
     └── modules/
         ├── storage.bicep     # StorageV2 storage account (Function App storage + static website)
         ├── functionApp.bicep # Log Analytics → App Insights → FC1 plan → Function App
-        ├── cdn.bicep         # Azure Front Door Standard — profile, endpoint, origin, custom domain + managed TLS
-        └── dns.bicep         # CNAME record in shared DNS zone (rg-dns-services-shared-001)
+        ├── staticWebApp.bicep # Azure Static Web Apps (Free tier)
+        ├── swa-domain.bicep   # Custom domain attachment (CNAME delegation)
+        └── dns.bicep          # CNAME record in shared DNS zone (rg-dns-services-shared-001)
 ```
 
 ## Local development
@@ -71,7 +72,7 @@ Push to `main` — GitHub Actions handles everything in order:
 
 1. **Test** — pytest
 2. **Deploy Infrastructure** — `az deployment sub create` with Bicep (idempotent); also enables HTTPS on the CDN custom domain
-3. **Deploy Function App** + **Deploy Static Website** — run in parallel; static website deploy also purges the CDN cache
+3. **Deploy Function App** + **Deploy Static Website** — run in parallel; static website deploy uses the SWA deploy action (token retrieved via OIDC at deploy time)
 
 CI/CD uses OIDC federated identity (no stored secrets beyond `AZURE_CLIENT_ID`, `AZURE_TENANT_ID`, `AZURE_SUBSCRIPTION_ID`).
 
@@ -95,11 +96,9 @@ az deployment sub what-if --location northeurope \              # dry run
 | App Service Plan | `asp-gasblender-prod` | FC1 / FlexConsumption |
 | App Insights | `appi-gasblender-prod` | Workspace-based |
 | Log Analytics | `log-gasblender-prod` | 30-day retention |
-| Front Door profile | `afd-gasblender-prod` | Standard_AzureFrontDoor |
-| Front Door endpoint | `gasblender-<token>` | Fronts storage static website, custom domain + managed TLS |
+| Static Web App | `gasblender-<token>` | Free tier, global distribution, managed TLS |
 
-- Frontend: `https://gasblender.redkic.co.uk/` (CDN custom domain)
-- Storage origin: `https://stgasblendertcif7s.z16.web.core.windows.net/`
+- Frontend: `https://gasblender.redkic.co.uk/` (SWA custom domain)
 - API endpoint: `https://gasblender-tcif7s.azurewebsites.net/api/TrimixBlend`
 - Function auth: anonymous (no API key required)
 - Extension bundle: `[4.*, 5.0.0)` (host.json)
