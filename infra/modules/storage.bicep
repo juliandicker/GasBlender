@@ -17,3 +17,4 @@ resource storageAccount 'Microsoft.Storage/storageAccounts@2023-01-01' = {
 }
 
 output storageAccountName string = storageAccount.name
+output staticWebsiteHostname string = replace(replace(storageAccount.properties.primaryEndpoints.web, 'https://', ''), '/', '')

@@ -1,7 +1,6 @@
 :root {
     --navy:        #0d1f35;
     --ocean:       #1a4a72;
-    --blue:        #1f6fa3;
     --aqua:        #0096b7;
     --aqua-light:  #b8e8f5;
     --surface:     #f4f7fb;
@@ -102,28 +101,26 @@ body::before {
     flex-shrink: 0;
 }
 
-/* ── Toggle buttons ──────────────────────── */
-.btn-section-toggle {
-    width: 100%;
-    text-align: left;
-    background: transparent;
-    border: 1px solid var(--border);
-    border-radius: 7px;
+/* ── Accordion (Quick Presets / Best Mix) ── */
+#targetAccordion { border-radius: 7px; overflow: hidden; }
+#targetAccordion .accordion-item  { background: transparent; border-color: var(--border); }
+#targetAccordion .accordion-button {
     font-size: 0.73rem;
     font-weight: 700;
     text-transform: uppercase;
     letter-spacing: 0.06em;
     color: var(--ocean);
-    padding: 0.38rem 0.7rem;
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    cursor: pointer;
-    transition: background 0.15s;
+    background: transparent;
+    padding: 0.45rem 0.7rem;
 }
-.btn-section-toggle:hover { background: #eef2f8; }
-.btn-section-toggle .chevron { transition: transform 0.2s; font-style: normal; }
-.btn-section-toggle[aria-expanded="true"] .chevron { transform: rotate(90deg); }
+#targetAccordion .accordion-button:not(.collapsed) {
+    color: var(--ocean);
+    background: #eef2f8;
+    box-shadow: none;
+}
+#targetAccordion .accordion-button:focus { box-shadow: none; }
+#targetAccordion .accordion-button::after { filter: hue-rotate(180deg) brightness(0.6); }
+#targetAccordion .accordion-body { padding: 0.5rem 0.7rem 0.7rem; }
 
 /* ── Info buttons ────────────────────────── */
 .info-btn {
@@ -131,7 +128,7 @@ body::before {
     border: none;
     padding: 0 0 0 0.25rem;
     color: var(--aqua);
-    font-size: 0.82rem;
+    font-size: 1rem;
     line-height: 1;
     cursor: pointer;
     opacity: 0.7;
@@ -144,16 +141,22 @@ body::before {
 .popover a { color: var(--aqua); }
 
 /* ── Preset pills ────────────────────────── */
+.preset-grid {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 0.25rem;
+}
 .preset-btn {
     border-radius: 20px;
     font-size: 0.73rem;
-    padding: 0.2rem 0.65rem;
+    padding: 0.2rem 0;
     border: 1px solid var(--border);
     color: var(--ocean);
     background: rgba(255,255,255,0.7);
     font-weight: 600;
     transition: all 0.15s;
-    white-space: nowrap;
+    text-align: center;
+    width: 100%;
 }
 .preset-btn:hover { background: var(--ocean); border-color: var(--ocean); color: white; }
 
@@ -164,17 +167,10 @@ body::before {
     border-radius: 8px;
     padding: 0.85rem 0.9rem;
 }
-#bm_mix { font-size: 2rem; font-weight: 800; color: var(--ocean); line-height: 1; }
+#bm_mix   { font-size: 2rem; font-weight: 800; color: var(--ocean); line-height: 1; }
+#bm_stats { font-size: 0.75rem; }
 
 /* ── Fill sequence steps ─────────────────── */
-.section-label {
-    font-size: 0.7rem;
-    font-weight: 700;
-    text-transform: uppercase;
-    letter-spacing: 0.1em;
-    color: var(--muted);
-    margin-bottom: 0.6rem;
-}
 .step-card {
     background: rgba(255,255,255,0.7);
     border: 1px solid var(--border);
@@ -219,6 +215,7 @@ body::before {
 
 /* ── Loading ─────────────────────────────── */
 #loading .spinner-border { color: var(--aqua); width: 1.8rem; height: 1.8rem; }
+#loading .text-muted     { font-size: 0.8rem; }
 
 /* ── Result section headings ─────────────── */
 .result-heading {
@@ -230,3 +227,22 @@ body::before {
     border-bottom: 2px solid var(--aqua);
     display: inline-block;
 }
+
+/* ── Apply button ────────────────────────── */
+.btn-apply {
+    background: var(--ocean);
+    color: white;
+    border-radius: 6px;
+}
+.btn-apply:hover { background: var(--navy); color: white; }
+
+/* ── Footer disclaimer ───────────────────── */
+.app-footer {
+    background: rgba(13,31,53,0.82);
+    color: #9bb4cc;
+    font-size: 0.72rem;
+    padding: 1.25rem 0;
+    margin-top: 2rem;
+    border-top: 1px solid rgba(0,150,183,0.3);
+}
+.app-footer strong { color: #c8dded; }
