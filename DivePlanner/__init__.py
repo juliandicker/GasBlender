@@ -71,6 +71,7 @@ def main(req: func.HttpRequest) -> func.HttpResponse:
     asc_rate_deep_mpm = float(body.get('asc_rate_deep_mpm', 9.0))
     asc_rate_shallow_mpm = float(body.get('asc_rate_shallow_mpm', 3.0))
     last_stop_m = int(body.get('last_stop_m', 3))
+    cns_warn_pct = float(body.get('cns_warn_pct', 80))
 
     if not (0 < diluent_o2 + diluent_he <= 100):
         return func.HttpResponse("Invalid diluent composition.", status_code=400)
@@ -84,6 +85,8 @@ def main(req: func.HttpRequest) -> func.HttpResponse:
         return func.HttpResponse("Ascent/descent rates out of range.", status_code=400)
     if last_stop_m not in (3, 6):
         return func.HttpResponse("last_stop_m must be 3 or 6.", status_code=400)
+    if not (1 <= cns_warn_pct <= 100):
+        return func.HttpResponse("cns_warn_pct must be between 1 and 100.", status_code=400)
     if bottom_time_min <= depth_m / desc_rate_mpm:
         return func.HttpResponse("Bottom time must exceed descent time.", status_code=400)
 
@@ -142,6 +145,15 @@ def main(req: func.HttpRequest) -> func.HttpResponse:
     tts_min = round(max(0.0, profile.total_time_min - bottom_time_min), 1)
     cns_pct = round(_cns_rate(setpoint) * profile.total_time_min, 1)
     otu = round(_otu_rate(setpoint) * profile.total_time_min, 1)
+
+    if cns_pct >= cns_warn_pct:
+        warnings.append({
+            'level': 'warning',
+            'message': (
+                f'CNS O₂ toxicity is {cns_pct:.1f}% — '
+                f'exceeds the warning threshold of {cns_warn_pct:.0f}%.'
+            ),
+        })
 
     response = {
         'stops': [

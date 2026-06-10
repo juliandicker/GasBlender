@@ -316,6 +316,7 @@ function calculate() {
     var ascRateDeep    = parseFloat(document.getElementById('asc_rate_deep').value) || 9;
     var ascRateShallow = parseFloat(document.getElementById('asc_rate_shallow').value) || 3;
     var lastStopM      = parseInt(document.getElementById('last_stop_m').value) || 3;
+    var cnsWarnPct     = parseFloat(document.getElementById('cns_warn_pct').value) || 80;
 
     var payload = JSON.stringify({
         diluent_o2:           gas.o2,
@@ -329,6 +330,7 @@ function calculate() {
         asc_rate_deep_mpm:    ascRateDeep,
         asc_rate_shallow_mpm: ascRateShallow,
         last_stop_m:          lastStopM,
+        cns_warn_pct:         cnsWarnPct,
     });
 
     var h   = window.location.hostname;
@@ -978,8 +980,10 @@ document.addEventListener('DOMContentLoaded', function () {
     if (savedAscRateDeep)    document.getElementById('asc_rate_deep').value   = savedAscRateDeep;
     if (savedAscRateShallow) document.getElementById('asc_rate_shallow').value = savedAscRateShallow;
     if (savedLastStopM)      document.getElementById('last_stop_m').value     = savedLastStopM;
+    var savedCnsWarnPct    = getCookie('cns_warn_pct');
+    if (savedCnsWarnPct)   document.getElementById('cns_warn_pct').value    = savedCnsWarnPct;
 
-    ['gf_low', 'gf_high', 'desc_rate', 'asc_rate_deep', 'asc_rate_shallow', 'last_stop_m'].forEach(function (id) {
+    ['gf_low', 'gf_high', 'desc_rate', 'asc_rate_deep', 'asc_rate_shallow', 'last_stop_m', 'cns_warn_pct'].forEach(function (id) {
         document.getElementById(id).addEventListener('change', function () {
             setCookie(id, this.value);
         });
