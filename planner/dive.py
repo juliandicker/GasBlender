@@ -65,10 +65,14 @@ def plan_ccr_dive(
     runtime_min += desc_time
     rec(bottom_depth_m, model.ceiling_m(gf_low))
 
-    # Bottom time
-    model.load_segment(gas, bottom_depth_m, bottom_depth_m, flat_bottom_time)
-    runtime_min += flat_bottom_time
-    rec(bottom_depth_m, model.ceiling_m(gf_low))
+    # Bottom time — 5-min chunks so long bottom times show gradual tissue loading
+    remaining = flat_bottom_time
+    while remaining > 0:
+        chunk = min(5.0, remaining)
+        model.load_segment(gas, bottom_depth_m, bottom_depth_m, chunk)
+        runtime_min += chunk
+        remaining -= chunk
+        rec(bottom_depth_m, model.ceiling_m(gf_low))
 
     # Ascent — step up the 3 m deco grid, loading tissues at each step.
     # The first deco stop emerges from the live ceiling rather than a snapshot
@@ -139,10 +143,13 @@ def plan_ccr_dive(
             model.load_segment(gas, stop_depth, stop_depth, 1.0)
             runtime_min += 1.0
             stop_minutes += 1
+            if stop_minutes % 5 == 0:
+                rec(stop_depth, model.ceiling_m(gf))
             if stop_minutes > 300:
                 break  # safety guard against runaway
 
-        rec(stop_depth, model.ceiling_m(gf))  # end of stop
+        if stop_minutes % 5 != 0:
+            rec(stop_depth, model.ceiling_m(gf))  # end of stop
 
         if stop_minutes > 0:
             stops.append(DecoStop(
