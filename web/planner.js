@@ -355,7 +355,7 @@ var editingBailoutId = null;
 
 var DEFAULT_BAILOUT_GASES = [
     { o2: 100, he: 0,  mod_m: 6,  cyl_l: 3,  cyl_bar: 200 },
-    { o2: 80,  he: 0,  mod_m: 6,  cyl_l: 3,  cyl_bar: 200 },
+    { o2: 80,  he: 0,  mod_m: 9,  cyl_l: 3,  cyl_bar: 200 },
     { o2: 60,  he: 0,  mod_m: 12, cyl_l: 3,  cyl_bar: 200 },
     { o2: 50,  he: 0,  mod_m: 15, cyl_l: 3,  cyl_bar: 200 },
     { o2: 21,  he: 0,  mod_m: 54, cyl_l: 7,  cyl_bar: 200 },
@@ -367,8 +367,14 @@ var DEFAULT_BAILOUT_GASES = [
 
 function bailoutAutoMod(o2) {
     if (o2 <= 0) return 150;
-    var depth = (1.4 / (o2 / 100) - 1.013) * 10;
-    return Math.max(3, Math.floor(depth / 3) * 3);
+    var fo2 = o2 / 100;
+    var depthAt14 = (1.4 / fo2 - 1.013) * 10;
+    if (depthAt14 <= 10) {
+        // Shallow deco gas — 1.6 bar ppO2 limit applies above 10 m
+        var depthAt16 = (1.6 / fo2 - 1.013) * 10;
+        return Math.max(3, Math.round(depthAt16 / 3) * 3);
+    }
+    return Math.max(3, Math.floor(depthAt14 / 3) * 3);
 }
 
 function saveBailoutLibrary() {
