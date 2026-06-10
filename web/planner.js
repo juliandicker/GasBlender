@@ -761,7 +761,7 @@ function buildBailoutScheduleCard(bailout) {
         ' data-bs-title="About this plan"' +
         ' data-bs-content="Worst-case scenario: bail out at end of bottom time. Tissue loading from the CCR phase is carried into the OC ascent.">ⓘ</button>';
     section.appendChild(heading);
-    initPopovers();
+    setTimeout(initPopovers, 0);
 
     var card = document.createElement('div');
     card.className = 'card';
