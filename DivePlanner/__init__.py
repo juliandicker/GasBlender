@@ -239,6 +239,7 @@ def main(req: func.HttpRequest) -> func.HttpResponse:
                 'otu': bailout_otu,
                 'gas_switches': bailout.gas_switches,
                 'profile_points': bailout.profile_points,
+                'tissue_saturations': bailout.tissue_saturations,
             }
         except Exception as e:
             logging.exception("Bailout planning error")
