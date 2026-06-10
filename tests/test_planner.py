@@ -110,6 +110,30 @@ class TestCCRReferenceScenario:
     #     assert profile.total_time_min == pytest.approx(57.0, abs=2)  # replace with OVM value
 
 
+class TestLastStopDepth:
+
+    def test_default_last_stop_is_3m(self):
+        gas = CCRGas(10, 70, 1.3)
+        profile = plan_ccr_dive(gas, 60, 20, 0.6, 0.8)
+        assert profile.stops[-1].depth_m == 3
+
+    def test_last_stop_6m_shallowest_stop_is_6m(self):
+        gas = CCRGas(10, 70, 1.3)
+        profile = plan_ccr_dive(gas, 60, 20, 0.6, 0.8, last_stop_m=6)
+        assert len(profile.stops) > 0
+        assert profile.stops[-1].depth_m == 6
+
+    def test_last_stop_6m_no_3m_stop(self):
+        gas = CCRGas(10, 70, 1.3)
+        profile = plan_ccr_dive(gas, 60, 20, 0.6, 0.8, last_stop_m=6)
+        assert all(s.depth_m >= 6 for s in profile.stops)
+
+    def test_last_stop_6m_runtime_plausible(self):
+        gas = CCRGas(10, 70, 1.3)
+        profile = plan_ccr_dive(gas, 60, 20, 0.6, 0.8, last_stop_m=6)
+        assert profile.total_time_min > 20.0
+
+
 class TestDensityAnalysis:
 
     def test_10_70_at_60m_density(self):

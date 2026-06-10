@@ -35,12 +35,13 @@ def plan_ccr_dive(
     desc_rate_mpm=20.0,
     asc_rate_deep_mpm=9.0,
     asc_rate_shallow_mpm=3.0,
+    last_stop_m=3,
 ):
     """Plan a CCR dive and return a DiveProfile with deco stops.
 
     bottom_time_min: run time from dive start until ascent begins (includes descent).
     gf_low and gf_high are fractions (0.0–1.0).
-    Stops are at 3 m multiples, minimum 1 min each.
+    Stops are at 3 m multiples, shallowest at last_stop_m (3 or 6).
     """
     model = BuhlmannModel()
     runtime_min = 0.0
@@ -93,10 +94,12 @@ def plan_ccr_dive(
         ceiling = model.ceiling_m(gf_low)
         rec(current_depth, ceiling)
         if ceiling > 0.0 and _round_up_to_3m(ceiling) >= current_depth:
-            first_stop_depth = max(3, int(current_depth))
+            first_stop_depth = max(last_stop_m, int(current_depth))
             break
-        if current_depth <= 3.0:
-            break  # ceiling never caught us — no deco required
+        if current_depth <= last_stop_m:
+            if ceiling > 0.0:
+                first_stop_depth = last_stop_m
+            break
         next_depth = current_depth - 3.0
         seg_time = 3.0 / asc_rate(current_depth)
         model.load_segment(gas, current_depth, next_depth, seg_time)
@@ -116,16 +119,16 @@ def plan_ccr_dive(
             tissue_saturations=model.tissue_saturations(gf_high),
         )
 
-    # Work through stops from first_stop_depth down to 3 m.
+    # Work through stops from first_stop_depth down to last_stop_m.
     # At each stop, wait until the ceiling (unclamped, can go below surface) clears
     # the NEXT stop depth minus 0.5 m.
     stop_depth = first_stop_depth
-    while stop_depth >= 3:
+    while stop_depth >= last_stop_m:
         # GF interpolated linearly from gf_low at first_stop_depth to gf_high at surface
         gf = gf_low + (gf_high - gf_low) * (first_stop_depth - stop_depth) / first_stop_depth
         gf = max(gf_low, min(gf_high, gf))
 
-        next_stop = stop_depth - 3  # 0 for the final 3 m stop
+        next_stop = stop_depth - 3 if stop_depth > last_stop_m else 0
         def _raw_ceiling_m(g):
             return (model.ceiling_bar(g) - SURFACE_BAR) * 10.0
 
@@ -148,7 +151,7 @@ def plan_ccr_dive(
                 runtime_min=round(runtime_min, 1),
             ))
 
-        next_depth = stop_depth - 3
+        next_depth = stop_depth - 3 if stop_depth > last_stop_m else 0
         if next_depth > 0:
             asc_time = 3.0 / asc_rate(stop_depth)
             model.load_segment(gas, stop_depth, next_depth, asc_time)
@@ -162,9 +165,9 @@ def plan_ccr_dive(
         model.load_segment(gas, current_depth, 0.0, asc_time)
         runtime_min += asc_time
 
-    # Surface arrival (3 m → surface, ~1 min, shown on chart but not in total_time_min)
+    # Surface arrival (last_stop_m → surface, shown on chart but not in total_time_min)
     profile_points.append({
-        't': round(runtime_min + 3.0 / asc_rate_shallow_mpm, 2),
+        't': round(runtime_min + last_stop_m / asc_rate_shallow_mpm, 2),
         'd': 0.0,
         'c': 0.0,
         'sats': model.tissue_saturations(gf_high),
