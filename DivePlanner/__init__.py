@@ -44,6 +44,18 @@ def _otu_rate(ppo2):
     return ((ppo2 - 0.5) / 0.5) ** (5 / 6)
 
 
+def _gas_label(g):
+    o2 = round(g.fo2 * 100)
+    he = round(g.fhe * 100)
+    if he > 0:
+        return f'Tx{o2}/{he}'
+    if o2 == 100:
+        return 'O₂'
+    if o2 == 21:
+        return 'Air'
+    return f'Nx{o2}'
+
+
 def _oc_cns_otu(bailout_profile, sorted_gases):
     """Compute CNS% and OTU for an OC bailout plan by integrating per-segment ppO2.
 
@@ -204,6 +216,53 @@ def main(req: func.HttpRequest) -> func.HttpResponse:
                 f'exceeds the warning threshold of {cns_warn_pct:.0f}%.'
             ),
         })
+
+    # Bailout gas density warnings — deepest gas used at depth_m; each
+    # subsequent gas is first used when ascending to its own MOD.
+    if oc_gases:
+        sorted_desc = sorted(oc_gases, key=lambda g: g.mod_m, reverse=True)
+        for i, g in enumerate(sorted_desc):
+            use_depth = depth_m if i == 0 else g.mod_m
+            d = gas_density(g.fo2 * 100, g.fhe * 100, use_depth)
+            label = _gas_label(g)
+            ppo2 = g.fo2 * (use_depth / 10.0 + 1.0)
+            if ppo2 > 1.6:
+                warnings.append({
+                    'level': 'danger',
+                    'message': (
+                        f'Bailout gas {label} at {use_depth:.0f} m: '
+                        f'ppO₂ {ppo2:.2f} bar exceeds the absolute maximum (1.6 bar). '
+                        f'This gas cannot be safely breathed at this depth.'
+                    ),
+                })
+            elif ppo2 >= 1.4:
+                warnings.append({
+                    'level': 'warning',
+                    'message': (
+                        f'Bailout gas {label} at {use_depth:.0f} m: '
+                        f'ppO₂ {ppo2:.2f} bar is at or above the working limit (1.4 bar). '
+                        f'Consider a lower O₂ fraction or shallower planned depth.'
+                    ),
+                })
+            if d > 6.3:
+                warnings.append({
+                    'level': 'danger',
+                    'message': (
+                        f'Bailout gas {label} at {use_depth:.0f} m: '
+                        f'gas density {d:.2f} g/L exceeds the upper limit (6.3 g/L). '
+                        f'This gas cannot be safely breathed at this depth — '
+                        f'consider a less dense alternative or reducing planned depth.'
+                    ),
+                })
+            elif d > 5.2:
+                warnings.append({
+                    'level': 'warning',
+                    'message': (
+                        f'Bailout gas {label} at {use_depth:.0f} m: '
+                        f'gas density {d:.2f} g/L exceeds the recommended limit (5.2 g/L). '
+                        f'Increased work of breathing at bailout depth.'
+                    ),
+                })
 
     # Bailout plan
     bailout_response = None
