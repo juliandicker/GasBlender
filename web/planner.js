@@ -129,33 +129,45 @@ function renderGasLibrary() {
     });
 }
 
-function buildGasCard(gas) {
+function buildGasCard(gas, isBailout) {
     var o2 = gas.o2, he = gas.he;
     var n2 = Math.max(0, 100 - o2 - he);
     var name = gasName(o2, he);
     var limRec   = densityLimitDepth(o2, he, 5.2);
     var limUpper = densityLimitDepth(o2, he, 6.3);
+    var infoLine, editFn, deleteFn;
+    if (isBailout) {
+        infoLine = gas.mod_m <= limRec
+            ? 'MOD ' + gas.mod_m + ' m'
+            : limRec + ' m – ' + limUpper + ' m';
+        editFn   = 'editBailoutGas';
+        deleteFn = 'confirmDeleteBailoutGas';
+    } else {
+        infoLine = limRec + ' m – ' + limUpper + ' m · SP ' + gas.setpoint + ' bar';
+        editFn   = 'editGas';
+        deleteFn = 'confirmDeleteGas';
+    }
 
     var card = document.createElement('div');
     card.className = 'gas-card' + (gas.active ? ' gas-card-active' : '');
     card.style.cursor = 'pointer';
-    card.onclick = function() { selectGas(gas.id); };
+    card.onclick = function() { isBailout ? toggleBailoutGas(gas.id) : selectGas(gas.id); };
 
     card.innerHTML =
         '<div class="gas-card-top">' +
             '<span class="gas-card-name">' + name + '</span>' +
+            '<span class="gas-card-info">' + infoLine + '</span>' +
             '<span>' +
                 '<i class="bi bi-' + (gas.active ? 'check-circle-fill' : 'circle') + ' btn-gas-action"' + (gas.active ? ' style="color:var(--aqua)"' : '') + '></i>' +
-                '<button class="btn-gas-action" onclick="event.stopPropagation();editGas(' + gas.id + ')" title="Edit"><i class="bi bi-pencil"></i></button>' +
-                '<button class="btn-gas-action" onclick="event.stopPropagation();confirmDeleteGas(' + gas.id + ')" title="Delete"><i class="bi bi-trash"></i></button>' +
+                '<button class="btn-gas-action" onclick="event.stopPropagation();' + editFn + '(' + gas.id + ')" title="Edit"><i class="bi bi-pencil"></i></button>' +
+                '<button class="btn-gas-action" onclick="event.stopPropagation();' + deleteFn + '(' + gas.id + ')" title="Delete"><i class="bi bi-trash"></i></button>' +
             '</span>' +
         '</div>' +
         '<div class="gas-bar">' +
             '<div class="gas-bar-o2" style="width:' + o2 + '%"></div>' +
             '<div class="gas-bar-he" style="width:' + he + '%"></div>' +
             '<div class="gas-bar-n2" style="width:' + n2 + '%"></div>' +
-        '</div>' +
-        '<div class="gas-card-info">' + limRec + ' m – ' + limUpper + ' m · SP ' + gas.setpoint + ' bar</div>';
+        '</div>';
 
     return card;
 }
@@ -441,42 +453,10 @@ function renderBailoutLibrary() {
     var container = document.getElementById('bailout_library');
     container.innerHTML = '';
     bailoutLibrary.forEach(function (gas) {
-        container.appendChild(buildBailoutCard(gas));
+        container.appendChild(buildGasCard(gas, true));
     });
 }
 
-function buildBailoutCard(gas) {
-    var o2 = gas.o2, he = gas.he;
-    var n2 = Math.max(0, 100 - o2 - he);
-    var name = gasName(o2, he);
-    var limRec = densityLimitDepth(o2, he, 5.2);
-    var bindingInfo = gas.mod_m <= limRec
-        ? 'MOD ' + gas.mod_m + ' m'
-        : 'Density max ' + limRec + ' m';
-
-    var card = document.createElement('div');
-    card.className = 'gas-card' + (gas.active ? ' gas-card-active' : '');
-    card.style.cursor = 'pointer';
-    card.onclick = function() { toggleBailoutGas(gas.id); };
-
-    card.innerHTML =
-        '<div class="gas-card-top">' +
-            '<span class="gas-card-name">' + name + '</span>' +
-            '<span>' +
-                '<i class="bi bi-' + (gas.active ? 'check-circle-fill' : 'circle') + ' btn-gas-action"' + (gas.active ? ' style="color:var(--aqua)"' : '') + '></i>' +
-                '<button class="btn-gas-action" onclick="event.stopPropagation();editBailoutGas(' + gas.id + ')" title="Edit"><i class="bi bi-pencil"></i></button>' +
-                '<button class="btn-gas-action" onclick="event.stopPropagation();confirmDeleteBailoutGas(' + gas.id + ')" title="Delete"><i class="bi bi-trash"></i></button>' +
-            '</span>' +
-        '</div>' +
-        '<div class="gas-bar">' +
-            '<div class="gas-bar-o2" style="width:' + o2 + '%"></div>' +
-            '<div class="gas-bar-he" style="width:' + he + '%"></div>' +
-            '<div class="gas-bar-n2" style="width:' + n2 + '%"></div>' +
-        '</div>' +
-        '<div class="gas-card-info">' + bindingInfo + '</div>';
-
-    return card;
-}
 
 function toggleBailoutGas(id) {
     var gas = bailoutLibrary.find(function (g) { return g.id === id; });
@@ -599,6 +579,39 @@ function calculate() {
         });
 }
 
+// ── Schedule table helpers ────────────────────────────────────────────────────
+
+function buildScheduleTable() {
+    var card = document.createElement('div');
+    card.className = 'card';
+    var cardBody = document.createElement('div');
+    cardBody.className = 'card-body p-0';
+    var tableWrap = document.createElement('div');
+    tableWrap.className = 'table-responsive';
+    var table = document.createElement('table');
+    table.className = 'table table-sm mb-0 deco-table';
+    var thead = document.createElement('thead');
+    thead.innerHTML =
+        '<tr>' +
+        '<th class="ps-2" style="width:2rem"></th>' +
+        '<th>Depth</th><th>T</th><th>RT</th>' +
+        '<th>ppO₂</th><th>g/L</th><th>Gas</th>' +
+        '</tr>';
+    table.appendChild(thead);
+    var tbody = document.createElement('tbody');
+    table.appendChild(tbody);
+    tableWrap.appendChild(table);
+    cardBody.appendChild(tableWrap);
+    card.appendChild(cardBody);
+    return { card: card, tbody: tbody };
+}
+
+function densTd(o2, he, depthM) {
+    var v = surfaceDensity(o2, he) * (depthM / 10.0 + 1.0);
+    var color = v > 6.3 ? '#dc3545' : v > 5.2 ? '#e07000' : '';
+    return '<td' + (color ? ' style="color:' + color + '"' : '') + '>' + v.toFixed(2) + '</td>';
+}
+
 // ── Result rendering ──────────────────────────────────────────────────────────
 
 function buildResult(data) {
@@ -633,37 +646,10 @@ function buildResult(data) {
     var descTime     = Math.round(depthM / descRate);
     var flatBtMin    = Math.round(btMin - descTime);   // flat time at depth
 
-    function densStr(d) {
-        return (surfaceDensity(gO2, gHe) * (d / 10.0 + 1.0)).toFixed(2);
-    }
-    function densColor(d) {
-        var v = surfaceDensity(gO2, gHe) * (d / 10.0 + 1.0);
-        return v > 6.3 ? '#dc3545' : v > 5.2 ? '#e07000' : '';
-    }
-
-    var card = document.createElement('div');
-    card.className = 'card';
-    var cardBody = document.createElement('div');
-    cardBody.className = 'card-body p-0';
-
-    var tableWrap = document.createElement('div');
-    tableWrap.className = 'table-responsive';
-    var table = document.createElement('table');
-    table.className = 'table table-sm mb-0 deco-table';
-
-    var thead = document.createElement('thead');
-    thead.innerHTML =
-        '<tr>' +
-        '<th class="ps-2" style="width:2rem"></th>' +
-        '<th>Depth</th><th>T</th><th>RT</th>' +
-        '<th>ppO₂</th><th>g/L</th><th>Gas</th>' +
-        '</tr>';
-    table.appendChild(thead);
-
-    var tbody = document.createElement('tbody');
+    var t = buildScheduleTable();
+    var tbody = t.tbody;
 
     // Descent row
-    var dcDesc = densColor(depthM);
     var trDesc = document.createElement('tr');
     trDesc.innerHTML =
         '<td class="ps-2"><i class="bi bi-arrow-down-circle" style="color:#0077b6"></i></td>' +
@@ -671,11 +657,11 @@ function buildResult(data) {
         '<td>' + descTime + '</td>' +
         '<td>' + descTime + '</td>' +
         '<td>' + sp.toFixed(2) + '</td>' +
-        '<td' + (dcDesc ? ' style="color:' + dcDesc + '"' : '') + '>' + densStr(depthM) + '</td>' +
+        densTd(gO2, gHe, depthM) +
         '<td>' + gShort + '</td>';
     tbody.appendChild(trDesc);
 
-    // Bottom row — T = flat time at depth, RT = btMin (run time when ascent begins)
+    // Bottom row
     var trBtm = document.createElement('tr');
     trBtm.innerHTML =
         '<td class="ps-2"><i class="bi bi-circle-fill" style="color:#03045e;font-size:0.55em;vertical-align:middle"></i></td>' +
@@ -683,7 +669,7 @@ function buildResult(data) {
         '<td>' + flatBtMin + '</td>' +
         '<td>' + Math.round(btMin) + '</td>' +
         '<td>' + sp.toFixed(2) + '</td>' +
-        '<td' + (dcDesc ? ' style="color:' + dcDesc + '"' : '') + '>' + densStr(depthM) + '</td>' +
+        densTd(gO2, gHe, depthM) +
         '<td>' + gShort + '</td>';
     tbody.appendChild(trBtm);
 
@@ -702,7 +688,6 @@ function buildResult(data) {
         tbody.appendChild(trAsc);
     } else {
         data.stops.forEach(function (stop) {
-            var dc = densColor(stop.depth_m);
             var tr = document.createElement('tr');
             tr.innerHTML =
                 '<td class="ps-2"><i class="bi bi-arrow-up-circle" style="color:#e07000"></i></td>' +
@@ -710,17 +695,13 @@ function buildResult(data) {
                 '<td>' + stop.time_min + '</td>' +
                 '<td>' + Math.round(stop.runtime_min) + '</td>' +
                 '<td>' + sp.toFixed(2) + '</td>' +
-                '<td' + (dc ? ' style="color:' + dc + '"' : '') + '>' + densStr(stop.depth_m) + '</td>' +
+                densTd(gO2, gHe, stop.depth_m) +
                 '<td>' + gShort + '</td>';
             tbody.appendChild(tr);
         });
     }
 
-    table.appendChild(tbody);
-    tableWrap.appendChild(table);
-    cardBody.appendChild(tableWrap);
-    card.appendChild(cardBody);
-    scheduleDiv.appendChild(card);
+    scheduleDiv.appendChild(t.card);
 
     if (data.tts_min !== undefined) {
         scheduleDiv.appendChild(buildMetricsCard(data));
@@ -797,29 +778,10 @@ function buildBailoutScheduleCard(data, xMax) {
         ' data-bs-toggle="popover" data-bs-trigger="focus" data-bs-placement="auto"' +
         ' data-bs-title="About this plan"' +
         ' data-bs-content="Worst-case scenario: bail out at end of bottom time. Tissue loading from the CCR phase is carried into the OC ascent.">ⓘ</button>';
-    section.appendChild(heading);
     setTimeout(initPopovers, 0);
 
-    var card = document.createElement('div');
-    card.className = 'card';
-    var cardBody = document.createElement('div');
-    cardBody.className = 'card-body p-0';
-
-    var tableWrap = document.createElement('div');
-    tableWrap.className = 'table-responsive';
-    var table = document.createElement('table');
-    table.className = 'table table-sm mb-0 deco-table';
-
-    var thead = document.createElement('thead');
-    thead.innerHTML =
-        '<tr>' +
-        '<th class="ps-2" style="width:2rem"></th>' +
-        '<th>Depth</th><th>T</th><th>RT</th>' +
-        '<th>ppO₂</th><th>Gas</th>' +
-        '</tr>';
-    table.appendChild(thead);
-
-    var tbody = document.createElement('tbody');
+    var t = buildScheduleTable();
+    var tbody = t.tbody;
 
     // CCR descent row
     var trDesc = document.createElement('tr');
@@ -830,6 +792,7 @@ function buildBailoutScheduleCard(data, xMax) {
         '<td>' + descTime + '</td>' +
         '<td>' + descTime + '</td>' +
         '<td>' + sp.toFixed(2) + '</td>' +
+        densTd(gas ? gas.o2 : 21, gas ? gas.he : 0, depthM) +
         '<td>' + gShort + '</td>';
     tbody.appendChild(trDesc);
 
@@ -842,6 +805,7 @@ function buildBailoutScheduleCard(data, xMax) {
         '<td>' + flatBtMin + '</td>' +
         '<td>' + Math.round(btMin) + '</td>' +
         '<td>' + sp.toFixed(2) + '</td>' +
+        densTd(gas ? gas.o2 : 21, gas ? gas.he : 0, depthM) +
         '<td>' + gShort + '</td>';
     tbody.appendChild(trBtm);
 
@@ -857,6 +821,7 @@ function buildBailoutScheduleCard(data, xMax) {
         '<td>—</td>' +
         '<td>' + Math.round(btMin) + '</td>' +
         '<td>' + firstOcPpO2 + '</td>' +
+        (firstOcGas ? densTd(firstOcGas.o2, firstOcGas.he, depthM) : '<td>—</td>') +
         '<td>' + firstOcName + '</td>';
     tbody.appendChild(trSwitch);
 
@@ -868,8 +833,7 @@ function buildBailoutScheduleCard(data, xMax) {
             '<td>' + depthM + '→0m</td>' +
             '<td>' + ascTime + '</td>' +
             '<td>' + Math.round(btMin + bailout.total_time_min) + '</td>' +
-            '<td>—</td>' +
-            '<td>—</td>';
+            '<td>—</td><td>—</td><td>—</td>';
         tbody.appendChild(trAsc);
     } else {
         bailout.stops.forEach(function (stop) {
@@ -883,16 +847,13 @@ function buildBailoutScheduleCard(data, xMax) {
                 '<td>' + stop.time_min + '</td>' +
                 '<td>' + Math.round(btMin + stop.runtime_min) + '</td>' +
                 '<td>' + ppO2 + '</td>' +
+                (g ? densTd(g.o2, g.he, stop.depth_m) : '<td>—</td>') +
                 '<td>' + gName + '</td>';
             tbody.appendChild(tr);
         });
     }
 
-    table.appendChild(tbody);
-    tableWrap.appendChild(table);
-    cardBody.appendChild(tableWrap);
-    card.appendChild(cardBody);
-    section.appendChild(card);
+    section.appendChild(t.card);
 
     var cnsColor = bailout.cns_pct > 80 ? '#dc3545' : bailout.cns_pct > 40 ? '#e07000' : 'var(--ocean)';
     var otuColor = bailout.otu > 250 ? '#dc3545' : bailout.otu > 150 ? '#e07000' : 'var(--navy)';
@@ -931,7 +892,8 @@ function buildBailoutScheduleCard(data, xMax) {
 
         var tableCol = document.createElement('div');
         tableCol.className = 'col-12 col-lg-5';
-        tableCol.appendChild(card);
+        tableCol.appendChild(heading);
+        tableCol.appendChild(t.card);
         tableCol.appendChild(metCard);
         row.appendChild(tableCol);
 
@@ -942,7 +904,8 @@ function buildBailoutScheduleCard(data, xMax) {
 
         section.appendChild(row);
     } else {
-        section.appendChild(card);
+        section.appendChild(heading);
+        section.appendChild(t.card);
         section.appendChild(metCard);
     }
 
