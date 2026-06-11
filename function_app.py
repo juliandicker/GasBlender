@@ -403,9 +403,10 @@ def dive_planner(req: DivePlannerRequest) -> DivePlannerResponse:
             ),
         ))
 
-    tts_min = round(max(0.0, profile.total_time_min - bottom_time_actual), 1)
-    cns_pct = round(_cns_rate(req.setpoint) * profile.total_time_min, 1)
-    otu     = round(_otu_rate(req.setpoint) * profile.total_time_min, 1)
+    tts_min   = round(max(0.0, profile.total_time_min - bottom_time_actual), 1)
+    _eff_ppo2 = max(req.setpoint, diluent_ppo2)
+    cns_pct   = round(_cns_rate(_eff_ppo2) * bottom_time_actual + _cns_rate(req.setpoint) * tts_min, 1)
+    otu       = round(_otu_rate(_eff_ppo2) * bottom_time_actual + _otu_rate(req.setpoint) * tts_min, 1)
 
     if cns_pct >= req.cns_warn_pct:
         warnings.append(Warning(

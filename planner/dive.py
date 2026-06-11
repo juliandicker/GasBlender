@@ -131,14 +131,14 @@ def _run_deco_ascent(
                 first_stop_depth = last_stop_m
             break
         next_depth = current_depth - 3.0
-        g = gas_at_depth(next_depth)
-        if g is not _cur_gas:
-            gas_switches.append({'depth_m': next_depth, 'label': g.label if hasattr(g, 'label') else ''})
-            _cur_gas = g
+        next_gas = gas_at_depth(next_depth)
         seg_time = 3.0 / asc_rate(current_depth)
         model.load_segment(_cur_gas, current_depth, next_depth, seg_time)
         runtime_min += seg_time
         current_depth = next_depth
+        if next_gas is not _cur_gas:
+            gas_switches.append({'depth_m': next_depth, 'label': next_gas.label if hasattr(next_gas, 'label') else ''})
+            _cur_gas = next_gas
 
     if first_stop_depth is None:
         if current_depth > 0.0:
@@ -200,15 +200,13 @@ def _run_deco_ascent(
         current_depth = float(next_depth)
         stop_depth = next_depth
 
-    # Final ascent from last_stop_m (or current_depth) to surface
-    if current_depth > 0.0:
-        asc_time = current_depth / asc_rate_shallow_mpm
-        model.load_segment(_cur_gas, current_depth, 0.0, asc_time)
-        runtime_min += asc_time
+    # Final ascent from last_stop_m to surface
+    asc_time = last_stop_m / asc_rate_shallow_mpm
+    model.load_segment(_cur_gas, float(last_stop_m), 0.0, asc_time)
+    runtime_min += asc_time
 
-    # Surface arrival
     profile_points.append({
-        't': round(runtime_min + last_stop_m / asc_rate_shallow_mpm, 2),
+        't': round(runtime_min, 2),
         'd': 0.0,
         'c': 0.0,
         'sats': model.tissue_saturations(gf_high),
