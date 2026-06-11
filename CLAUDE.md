@@ -2,24 +2,22 @@
 
 ## Project overview
 
-Two tools for technical diving. Python Azure Functions API + static HTML frontend hosted on Azure Static Web Apps (Free tier).
+Two tools for technical diving. Python Azure Functions API (FastAPI + ASGI) + static HTML frontend hosted on Azure Static Web Apps (Free tier).
 
-- **Gas Blender** (`TrimixBlend/`) — fill-sequence calculator: He → O₂ → air top-up steps
-- **Dive Planner** (`DivePlanner/`) — Bühlmann ZHL-16C CCR decompression planner with GF Low/High, gas density analysis, tissue saturation tracking, OTU/CNS
+- **Gas Blender** — fill-sequence calculator: He → O₂ → air top-up steps
+- **Dive Planner** — Bühlmann ZHL-16C CCR decompression planner with GF Low/High, gas density analysis, tissue saturation tracking, OTU/CNS
 
 ## Structure
 
 ```
 GasBlender/
-├── TrimixBlend/__init__.py   # Azure HTTP trigger — gas blending
-├── TrimixBlend/function.json
-├── DivePlanner/__init__.py   # Azure HTTP trigger — decompression planning (CNS/OTU/TTS/density)
-├── DivePlanner/function.json
+├── function_app.py           # ASGI entry point — FastAPI app, Pydantic models, both endpoints
+├── DivePlanner/__init__.py   # Helper module: CNS/OTU rates, gas consumption, binary search (tests import from here)
 ├── planner/
 │   ├── buhlmann.py           # ZHL-16C: Schreiner equation, GF ceiling, tissue saturations
 │   ├── dive.py               # CCR dive planner: descent, deco grid, profile points
 │   └── gas.py                # CCRGas: pp_n2 / pp_he respecting setpoint
-├── tests/                    # Unit tests (pytest) — 174 tests total
+├── tests/                    # Unit tests (pytest) — 213 tests total
 ├── gas_blender.py            # Core blending logic — single source of truth
 ├── web/
 │   ├── index.html            # Gas Blender UI
@@ -27,7 +25,7 @@ GasBlender/
 │   ├── planner.html          # Dive Planner UI (Chart.js, Bootstrap 5)
 │   ├── planner.js
 │   └── styles.css
-├── host.json                 # Azure Functions runtime config
+├── host.json                 # Azure Functions runtime config (routePrefix: "")
 ├── requirements.txt          # Pinned dependencies
 ├── .funcignore               # Excludes tests/, web/, README.md from deployment
 └── infra/
@@ -66,7 +64,7 @@ python -m http.server 8080 --directory web   # frontend on :8080
 pip install -r requirements-dev.txt
 pytest tests/ -v
 ```
-174 tests: 28 covering `Gas`, `BlendStep`, `TrimixBlend`, `topup_blend`; the rest cover the Bühlmann model, CCR dive planner, and OVM cross-validation.
+213 tests: 28 covering `Gas`, `BlendStep`, `TrimixBlend`, `topup_blend`; 3 covering OpenAPI schema generation; the rest cover the Bühlmann model, CCR dive planner, and OVM cross-validation.
 
 ## Pre-approved permissions
 
@@ -84,11 +82,12 @@ The following are already in the allowlists (`.claude/settings.json` and `.claud
 
 ## Conventions
 
-- **Single source of truth**: all gas blending logic lives in `gas_blender.py`; all decompression logic lives in `planner/`. Neither function (`TrimixBlend/`, `DivePlanner/`) duplicates logic — they only parse, validate, and call.
-- **Warnings belong in the API**: all safety warnings (ppO₂ floor, gas density) are generated in `DivePlanner/__init__.py` and returned as a `warnings` array (`[{level, message}]`). The frontend (and any future client such as an Android app) only renders them — no warning logic in the UI.
-- **Snake_case** for functions (`topup_blend`), PascalCase for classes (`Gas`, `TrimixBlend`, `BlendStep`).
+- **Single source of truth**: all gas blending logic lives in `gas_blender.py`; all decompression logic lives in `planner/`. `function_app.py` only handles HTTP contract (parsing, validation, response shaping) and calls into those modules.
+- **Warnings belong in the API**: all safety warnings (ppO₂ floor, gas density) are generated in `function_app.py` and returned as a `warnings` array (`[{level, message}]`). The frontend (and any future client) only renders them — no warning logic in the UI.
+- **FastAPI + Pydantic v2** for the HTTP layer: Pydantic models in `function_app.py` are the contract. Cross-field validation (GF ordering, bottom-time vs descent-time) uses `@model_validator`. Plain-text error responses are preserved for frontend compatibility via custom exception handlers.
+- **Snake_case** for functions (`topup_blend`), PascalCase for classes (`Gas`, `TrimixBlend`, `BlendStep`, Pydantic models).
 - **No comments** unless the why is non-obvious.
-- **Pinned dependencies** in `requirements.txt` (currently `azure-functions==1.24.0`).
+- **Pinned dependencies** in `requirements.txt` (`azure-functions==1.24.0`, `fastapi>=0.115.0`, `pydantic>=2.0.0`).
 - **Tests in `tests/`** — pytest, using plain `assert` and `pytest.approx`.
 
 ## Deployment
@@ -126,5 +125,8 @@ az deployment sub what-if --location northeurope \              # dry run
 - Frontend: `https://gasblender.redkic.co.uk/` (SWA custom domain)
 - Gas Blender API: `https://gasblender-tcif7s.azurewebsites.net/api/TrimixBlend`
 - Dive Planner API: `https://gasblender-tcif7s.azurewebsites.net/api/DivePlanner`
+- Swagger UI: `https://gasblender-tcif7s.azurewebsites.net/docs`
+- ReDoc: `https://gasblender-tcif7s.azurewebsites.net/redoc`
+- OpenAPI schema: `https://gasblender-tcif7s.azurewebsites.net/openapi.json`
 - Function auth: anonymous (no API key required)
 - Extension bundle: `[4.*, 5.0.0)` (host.json)

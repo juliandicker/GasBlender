@@ -11,12 +11,9 @@ Two tools for technical diving, built on Python Azure Functions and a static HTM
 
 ```
 GasBlender/
-├── TrimixBlend/
-│   ├── __init__.py         # Azure HTTP trigger — gas blending
-│   └── function.json
+├── function_app.py         # ASGI entry point — FastAPI app, Pydantic models, both endpoints
 ├── DivePlanner/
-│   ├── __init__.py         # Azure HTTP trigger — decompression planning
-│   └── function.json
+│   └── __init__.py         # Helper module: CNS/OTU rates, gas consumption, binary search
 ├── planner/
 │   ├── buhlmann.py         # ZHL-16C model: Schreiner equation, GF ceiling, tissue saturations
 │   ├── dive.py             # CCR dive planner: descent, deco grid, profile points
@@ -25,7 +22,8 @@ GasBlender/
 │   ├── test_gas_blender.py     # 28 gas blender tests
 │   ├── test_buhlmann.py        # Bühlmann model unit tests
 │   ├── test_planner.py         # Dive planner integration tests
-│   └── test_ovm_crossval.py    # OVM cross-validation (reference dives)
+│   ├── test_ovm_crossval.py    # OVM cross-validation (reference dives)
+│   └── test_openapi.py         # OpenAPI schema generation tests
 ├── infra/
 │   ├── main.bicep          # Subscription-scoped Bicep — resource group + all resources
 │   ├── main.bicepparam
@@ -50,15 +48,26 @@ Deployment is fully automated via GitHub Actions — push to `main` to deploy.
 |-----------|--------------|-----|
 | Gas Blender API | Azure Function App (Flex Consumption) | `https://gasblender-tcif7s.azurewebsites.net/api/TrimixBlend` |
 | Dive Planner API | Azure Function App (Flex Consumption) | `https://gasblender-tcif7s.azurewebsites.net/api/DivePlanner` |
+| Swagger UI | Azure Function App | `https://gasblender-tcif7s.azurewebsites.net/docs` |
+| ReDoc | Azure Function App | `https://gasblender-tcif7s.azurewebsites.net/redoc` |
+| OpenAPI schema | Azure Function App | `https://gasblender-tcif7s.azurewebsites.net/openapi.json` |
 | Frontend | Azure Static Web Apps (Free) | [https://gasblender.redkic.co.uk/](https://gasblender.redkic.co.uk/) |
 
 Infrastructure is defined in `infra/` as Bicep (subscription-scoped) and deployed via GitHub Actions on every push to `main`.
 
-## Gas Blender API
+## API documentation
 
-**POST** `https://gasblender-tcif7s.azurewebsites.net/api/TrimixBlend`
+Interactive documentation is served directly from the Function App:
 
-All pressures in bar, gas percentages as integers (0–100).
+- **Swagger UI**: `/docs`
+- **ReDoc**: `/redoc`
+- **OpenAPI schema** (JSON): `/openapi.json`
+
+The CI pipeline also exports `openapi.json` as a build artifact on every push to `main`.
+
+### Gas Blender
+
+**POST** `/api/TrimixBlend` — all pressures in bar, gas percentages as integers (0–100).
 
 ```json
 {
@@ -74,13 +83,11 @@ All pressures in bar, gas percentages as integers (0–100).
 }
 ```
 
-`helium_bar/o2/he` are optional — omit for a default 250 bar pure-helium bank.
+`helium_bar/o2/he` are optional (default: 250 bar pure helium). Returns HTTP 200 with the blend plan and gas analysis, or HTTP 400 for invalid inputs.
 
-Returns HTTP 200 with a JSON blend plan, or HTTP 400 if parameters are missing or invalid.
+### Dive Planner
 
-## Dive Planner API
-
-**POST** `https://gasblender-tcif7s.azurewebsites.net/api/DivePlanner`
+**POST** `/api/DivePlanner` — minimum required fields:
 
 ```json
 {
@@ -94,7 +101,7 @@ Returns HTTP 200 with a JSON blend plan, or HTTP 400 if parameters are missing o
 }
 ```
 
-Returns deco stops, total runtime, dive profile points (depth + ceiling + tissue saturations at each point), final tissue saturations, gas density analysis, TTS, CNS%, and OTU.
+Returns deco stops, total runtime, dive profile points (depth + ceiling + tissue saturations), gas density analysis, TTS, CNS%, and OTU. Optional fields include ascent/descent rates, last stop depth (3/4/5/6/9 m), CNS warning threshold, SAC rates, bailout gases with cylinder sizes, and per-gas supply analysis. See `/docs` for the full schema.
 
 ## Running locally
 
@@ -110,7 +117,7 @@ python -m http.server 8080 --directory web  # frontend on :8080
 
 ```bash
 pip install -r requirements-dev.txt
-pytest tests/ -v   # 174 tests
+pytest tests/ -v   # 213 tests
 ```
 
 ## Gas blending logic
@@ -127,8 +134,8 @@ If the helium bank runs short the calculator adds a second helium step using a f
 
 ## Tech stack
 
-- Python 3.11
-- Azure Functions (Python v4 runtime, Flex Consumption plan)
+- Python 3.11 · FastAPI · Pydantic v2
+- Azure Functions (ASGI / AsgiFunctionApp, Flex Consumption plan)
 - Azure Static Web Apps — Free tier (custom domain, managed HTTPS)
 - Application Insights + Log Analytics
 - Bicep (IaC — subscription-scoped)
