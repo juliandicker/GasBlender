@@ -14,6 +14,11 @@ ChartJS.register(
   Title, Tooltip, Legend, Filler,
 )
 
+function ceilToTick(val: number): number {
+  const step = val <= 30 ? 5 : val <= 90 ? 10 : val <= 180 ? 15 : 30
+  return Math.ceil(val / step) * step
+}
+
 interface PlanSectionProps {
   title: string
   decoStops: DecoStop[]
@@ -76,7 +81,7 @@ export default function PlanSection({
   }
 
   const autoXMax = profilePoints.length ? profilePoints[profilePoints.length - 1].t : totalTimeMin
-  const chartXMax = xAxisMax ?? autoXMax
+  const chartXMax = ceilToTick(xAxisMax ?? autoXMax)
 
   const profileData: ChartData<'line'> = {
     datasets: [
