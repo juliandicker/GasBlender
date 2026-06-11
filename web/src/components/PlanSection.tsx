@@ -127,10 +127,16 @@ export default function PlanSection({
         ticks: { font: { size: 10 } },
       },
     },
+    interaction: { mode: 'index', intersect: false },
     plugins: {
       legend: { display: true, labels: { font: { size: 10 }, boxWidth: 14, padding: 8 } },
       title: { display: false },
-      tooltip: { enabled: false },
+      tooltip: {
+        callbacks: {
+          title: (items) => `${Math.round(items[0].parsed.x ?? 0)} min`,
+          label: (item) => `${item.dataset.label}: ${(item.parsed.y ?? 0).toFixed(1)} m`,
+        },
+      },
     },
     animation: false,
   }
