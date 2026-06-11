@@ -191,11 +191,6 @@ export default function PlanSection({
   const cnsColor = cnsPct > 80 ? '#dc3545' : cnsPct > 40 ? '#e07000' : 'var(--ocean)'
   const otuColor = otu > 250    ? '#dc3545' : otu > 150   ? '#e07000' : 'var(--navy)'
 
-  // ppO2 for the initial OC bailout switch row
-  const bigO2  = bailoutInitialGas?.o2 ?? gO2
-  const bigHe  = bailoutInitialGas?.he ?? gHe
-  const bigPpO2 = ((bigO2 / 100) * (depth / 10 + 1)).toFixed(2)
-
   return (
     <div>
       {warnings.map((w, i) => (
@@ -241,23 +236,11 @@ export default function PlanSection({
                       <td>{(surfaceDensity(gO2, gHe) * (depth / 10 + 1)).toFixed(2)}</td>
                       <td style={{ fontSize: '0.78rem' }}>{gasName(gO2, gHe)}</td>
                     </tr>
-                    {/* OC bailout switch row */}
-                    {isBailout && (
-                      <tr style={{ background: 'rgba(220,53,69,0.07)' }}>
-                        <td className="ps-2"><i className="bi bi-lightning-charge-fill" style={{ color: '#dc3545' }} /></td>
-                        <td>{depth} m</td>
-                        <td>—</td>
-                        <td>{Math.round(bt)}</td>
-                        <td>{bigPpO2}</td>
-                        <td>{(surfaceDensity(bigO2, bigHe) * (depth / 10 + 1)).toFixed(2)}</td>
-                        <td style={{ fontSize: '0.78rem' }}>{gasName(bigO2, bigHe)}</td>
-                      </tr>
-                    )}
-                    {/* Deco stops — thick top border marks a gas switch above */}
+                    {/* Deco stops — thick top border marks a gas switch above (incl. OC bailout switch at first stop) */}
                     {decoStops.map((stop, i) => {
                       const isLast = i === decoStops.length - 1
                       const prevDepth = i === 0 ? Infinity : decoStops[i - 1].depth_m
-                      const switchAbove = gasSwitches.some(
+                      const switchAbove = (isBailout && i === 0) || gasSwitches.some(
                         sw => sw.depth_m >= stop.depth_m && sw.depth_m < prevDepth
                       )
                       const gasAtStop = resolveGasAtStop(stop.depth_m, gasSwitches, bailoutInitialGas ?? gas)
