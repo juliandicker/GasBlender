@@ -1,3 +1,4 @@
+import math
 from planner.dive import plan_oc_bailout
 
 # NOAA single-dive CNS table: (ppO2, % per minute)
@@ -147,4 +148,4 @@ def _max_bottom_time_within_gas_supply(
         if hi - lo < 0.25:
             break
 
-    return round(lo, 1), True
+    return math.floor(lo), True
