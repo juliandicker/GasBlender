@@ -464,6 +464,11 @@ export default function DivePlanner() {
         tagline="Bühlmann ZHL-16C decompression planner — CCR trimix"
         extraButtons={
           <>
+            {result && (
+              <button className="btn-cog" onClick={() => window.print()} title="Print / Save as PDF">
+                <i className="bi bi-printer" />
+              </button>
+            )}
             <button className="btn-cog" onClick={() => setSavedPlansOpen(true)} title="Saved plans">
               <i className="bi bi-bookmark" />
             </button>
@@ -593,13 +598,6 @@ export default function DivePlanner() {
               <div style={{ fontSize: '0.72rem', color: '#c00', marginTop: '0.3rem', fontStyle: 'italic' }}>
                 Not for operational use. Educational planning tool only.
               </div>
-            </div>
-
-            {/* Print button */}
-            <div className="no-print mb-3 text-end">
-              <button className="btn btn-sm btn-outline-secondary" onClick={() => window.print()}>
-                <i className="bi bi-printer me-1" />Print / Save as PDF
-              </button>
             </div>
 
             <PlanSection
