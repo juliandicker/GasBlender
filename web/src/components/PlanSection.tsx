@@ -161,13 +161,12 @@ export default function PlanSection({
       label: 'Saturation %',
       data: displaySats,
       backgroundColor: displaySats.map((s, i) => {
-        const a = i === controlIdx ? 0.85 : 0.35
-        return s > 100       ? `rgba(220,53,69,${a})`  :
-               s > gfHighPct ? `rgba(255,140,0,${a})`  :
-                               `rgba(32,150,130,${a})`
+        if (i === controlIdx) return 'rgba(230,180,0,0.85)'
+        return s > 100       ? 'rgba(220,53,69,0.75)'  :
+               s > gfHighPct ? 'rgba(255,140,0,0.75)'  :
+                               'rgba(32,150,130,0.75)'
       }),
-      borderColor: displaySats.map((_, i) => i === controlIdx ? 'rgba(0,0,0,0.5)' : 'transparent'),
-      borderWidth: 1,
+      borderWidth: 0,
     }],
   }
 
