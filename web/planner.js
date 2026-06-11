@@ -154,6 +154,18 @@ function buildGasCard(gas, isBailout) {
     card.style.cursor = 'pointer';
     card.onclick = function() { isBailout ? toggleBailoutGas(gas.id) : selectGas(gas.id); };
 
+    var cylFooter = '';
+    if (isBailout && gas.cyl_l && gas.cyl_bar) {
+        var reserveBar = parseFloat(document.getElementById('reserve_bar').value) || 50;
+        var usable = Math.round(gas.cyl_l * Math.max(0, gas.cyl_bar - reserveBar));
+        cylFooter =
+            '<div style="display:flex;justify-content:space-between;align-items:baseline;' +
+                    'font-size:0.62rem;color:var(--muted);margin-top:0.15rem;">' +
+                '<span>' + gas.cyl_l + ' L / ' + gas.cyl_bar + ' bar</span>' +
+                '<span style="font-weight:600;">' + usable + ' L</span>' +
+            '</div>';
+    }
+
     card.innerHTML =
         '<div class="gas-card-top">' +
             '<span class="gas-card-name">' + name + '</span>' +
@@ -168,7 +180,8 @@ function buildGasCard(gas, isBailout) {
             '<div class="gas-bar-o2" style="width:' + o2 + '%"></div>' +
             '<div class="gas-bar-he" style="width:' + he + '%"></div>' +
             '<div class="gas-bar-n2" style="width:' + n2 + '%"></div>' +
-        '</div>';
+        '</div>' +
+        cylFooter;
 
     return card;
 }
