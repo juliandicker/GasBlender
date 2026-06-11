@@ -6,6 +6,7 @@ import {
   Title, Tooltip, Legend, Filler,
   type ChartData, type ChartOptions,
 } from 'chart.js'
+import zoom from 'chartjs-plugin-zoom'
 import { Line, Bar } from 'react-chartjs-2'
 import type { DecoStop, ProfilePoint, GasSwitch, GasSupplyEntry, Warning } from '../types'
 import { surfaceDensity, gasName } from '../utils'
@@ -21,7 +22,7 @@ const SURFACE_BAR = 1.013
 
 ChartJS.register(
   CategoryScale, LinearScale, PointElement, LineElement, BarElement,
-  Title, Tooltip, Legend, Filler,
+  Title, Tooltip, Legend, Filler, zoom,
 )
 
 function ceilToTick(val: number): number {
@@ -63,6 +64,7 @@ export default function PlanSection({
   const [isFullscreen, setIsFullscreen] = useState(false)
   const [mvalueOpen, setMvalueOpen] = useState(false)
   const [activeView, setActiveView] = useState<'time' | 'mvalue'>('time')
+  const [modalFullscreen, setModalFullscreen] = useState(false)
 
   const displaySats = (hoveredSats ?? tissueSaturations).map(s => Math.round(s * 100))
   const gfHighPct = gfHigh
@@ -431,9 +433,16 @@ export default function PlanSection({
         </div>
       </div>
 
-      <Modal show={mvalueOpen} onHide={() => setMvalueOpen(false)} size="xl">
+      <Modal show={mvalueOpen} onHide={() => setMvalueOpen(false)}
+        size={modalFullscreen ? undefined : 'xl'} fullscreen={modalFullscreen || undefined}>
         <Modal.Header closeButton>
           <Modal.Title style={{ fontSize: '0.95rem' }}>Tissue loading</Modal.Title>
+          <button
+            className="btn btn-sm btn-outline-secondary ms-auto me-2"
+            onClick={() => setModalFullscreen(f => !f)}
+            title={modalFullscreen ? 'Exit fullscreen' : 'Fullscreen'}>
+            <i className={`bi bi-${modalFullscreen ? 'fullscreen-exit' : 'fullscreen'}`} />
+          </button>
         </Modal.Header>
         <Modal.Body>
           <div className="btn-group btn-group-sm mb-3" role="group">
@@ -449,8 +458,8 @@ export default function PlanSection({
             </button>
           </div>
           {activeView === 'time'
-            ? <MvalueDiagram profilePoints={profilePoints} />
-            : <MvaluePressureDiagram profilePoints={profilePoints} gfHigh={gfHigh} maxDepthM={depthM ?? 0} />
+            ? <MvalueDiagram profilePoints={profilePoints} isFullscreen={modalFullscreen} />
+            : <MvaluePressureDiagram profilePoints={profilePoints} gfHigh={gfHigh} maxDepthM={depthM ?? 0} isFullscreen={modalFullscreen} />
           }
         </Modal.Body>
       </Modal>
@@ -476,7 +485,11 @@ function resolveGasAtStop(
   return { o2, he, name: gasName(o2, he) }
 }
 
-function MvalueDiagram({ profilePoints }: { profilePoints: ProfilePoint[] }) {
+function MvalueDiagram({ profilePoints, isFullscreen }: {
+  profilePoints: ProfilePoint[]
+  isFullscreen?: boolean
+}) {
+  const chartRef = useRef<ChartJS<'line'>>(null)
   const pts = profilePoints.filter(p => p.inert && p.inert.length === 16)
 
   if (pts.length === 0) {
@@ -487,7 +500,6 @@ function MvalueDiagram({ profilePoints }: { profilePoints: ProfilePoint[] }) {
     )
   }
 
-  // Warm (red) for fast compartments, cool (blue) for slow
   const compColor = (i: number) => `hsl(${Math.round(i / 15 * 220)}, 65%, 42%)`
 
   const tissueDatasets = Array.from({ length: 16 }, (_, i) => ({
@@ -499,66 +511,71 @@ function MvalueDiagram({ profilePoints }: { profilePoints: ProfilePoint[] }) {
   }))
 
   const maxLoad = Math.max(...pts.flatMap(p => p.inert!.map(([n, h]) => n + h)))
-
   const chartData = { datasets: tissueDatasets } as unknown as ChartData<'line'>
 
-  const chartOptions: ChartOptions<'line'> = {
+  const chartOptions = {
     responsive: true,
     maintainAspectRatio: false,
     animation: false,
     interaction: { mode: 'nearest', intersect: false, axis: 'x' },
     scales: {
       x: {
-        type: 'linear',
-        min: 0,
+        type: 'linear', min: 0,
         title: { display: true, text: 'Time (min)', font: { size: 10 } },
         ticks: { font: { size: 9 } },
       },
       y: {
-        type: 'linear',
-        min: 0,
+        type: 'linear', min: 0,
         suggestedMax: +(maxLoad * 1.12).toFixed(1),
         title: { display: true, text: 'Inert gas pressure (bar)', font: { size: 10 } },
         ticks: { font: { size: 9 } },
       },
     },
     plugins: {
-      legend: {
-        display: true,
-        position: 'right',
-        labels: { font: { size: 9 }, boxWidth: 12, padding: 4 },
-      },
+      legend: { display: true, position: 'right', labels: { font: { size: 9 }, boxWidth: 12, padding: 4 } },
       tooltip: {
         callbacks: {
-          title: (items) => {
+          title: (items: { dataIndex: number }[]) => {
             const pt = pts[items[0].dataIndex]
-            if (!pt) return ''
-            return `t = ${pt.t.toFixed(1)} min · ${pt.d.toFixed(0)} m${pt.c > 0 ? ` · ceil ${pt.c.toFixed(0)} m` : ''}`
+            return pt ? `t = ${pt.t.toFixed(1)} min · ${pt.d.toFixed(0)} m${pt.c > 0 ? ` · ceil ${pt.c.toFixed(0)} m` : ''}` : ''
           },
-          label: (item) => {
-            const ci = item.datasetIndex
+          label: (item: { datasetIndex: number; dataIndex: number }) => {
             const pt = pts[item.dataIndex]
             if (!pt) return ''
-            const [pn2, phe] = pt.inert![ci]
-            return `C${ci + 1}: ${(pn2 + phe).toFixed(3)} bar  (N₂ ${pn2.toFixed(3)}  He ${phe.toFixed(3)})`
+            const [pn2, phe] = pt.inert![item.datasetIndex]
+            return `C${item.datasetIndex + 1}: ${(pn2 + phe).toFixed(3)} bar  (N₂ ${pn2.toFixed(3)}  He ${phe.toFixed(3)})`
           },
         },
       },
+      zoom: {
+        zoom: { wheel: { enabled: true, speed: 0.1 }, pinch: { enabled: true }, mode: 'xy' as const },
+        pan: { enabled: true, mode: 'xy' as const },
+      },
     },
-  }
+  } satisfies ChartOptions<'line'>
+
+  const chartHeight = isFullscreen ? 'calc(100vh - 190px)' : 450
 
   return (
-    <div style={{ height: 450, position: 'relative' }}>
-      <Line data={chartData} options={chartOptions} />
+    <div>
+      <div style={{ height: chartHeight, position: 'relative' }}>
+        <Line ref={chartRef} data={chartData} options={chartOptions} />
+      </div>
+      <div className="text-end mt-1">
+        <button className="btn btn-link btn-sm text-secondary p-0" style={{ fontSize: '0.75rem' }}
+          onClick={() => (chartRef.current as any)?.resetZoom()}>Reset zoom</button>
+      </div>
     </div>
   )
 }
 
-function MvaluePressureDiagram({ profilePoints, gfHigh, maxDepthM }: {
+function MvaluePressureDiagram({ profilePoints, gfHigh, maxDepthM, isFullscreen }: {
   profilePoints: ProfilePoint[]
   gfHigh: number
   maxDepthM: number
+  isFullscreen?: boolean
 }) {
+  const chartRef = useRef<ChartJS<'line'>>(null)
   const pts = profilePoints.filter(p => p.inert && p.inert.length === 16)
   if (pts.length === 0) {
     return (
@@ -571,11 +588,9 @@ function MvaluePressureDiagram({ profilePoints, gfHigh, maxDepthM }: {
   const gf   = gfHigh / 100
   const maxP = Math.max(maxDepthM / 10 + SURFACE_BAR, SURFACE_BAR + 0.5)
   const compColor = (i: number) => `hsl(${Math.round(i / 15 * 220)}, 65%, 42%)`
-
   const mLine  = (a: number, b: number, x: number) => a + x / b
   const gfLine = (a: number, b: number, x: number) => gf * a + x * (1 + gf * (1 / b - 1))
 
-  // Reference lines — 2 points each, clipped by chart Y max so they don't bloat scale
   const mvalueDatasets = ZHL16C_AB.map(([a, b], i) => ({
     label: i === 0 ? 'M-value' : '_',
     data: [{ x: SURFACE_BAR, y: mLine(a, b, SURFACE_BAR) }, { x: maxP, y: mLine(a, b, maxP) }],
@@ -597,7 +612,6 @@ function MvaluePressureDiagram({ profilePoints, gfHigh, maxDepthM }: {
     borderColor: 'rgba(40,160,80,0.65)', borderWidth: 1.5, borderDash: [6, 4],
   }
 
-  // Tissue path: (ambient pressure, pn2+phe) at each profile point per compartment
   const tissueDatasets = Array.from({ length: 16 }, (_, i) => ({
     label: `C${i + 1} (${N2_HALF_TIMES[i]} min)`,
     data: pts.map(p => ({ x: p.d / 10 + SURFACE_BAR, y: +(p.inert![i][0] + p.inert![i][1]).toFixed(4) })),
@@ -608,48 +622,43 @@ function MvaluePressureDiagram({ profilePoints, gfHigh, maxDepthM }: {
 
   const maxLoad = Math.max(...pts.flatMap(p => p.inert!.map(([n, h]) => n + h)))
   const yMax = maxLoad * 1.2
-
   const chartData = {
     datasets: [...mvalueDatasets, ...gfDatasets, diagDataset, ...tissueDatasets],
   } as unknown as ChartData<'line'>
 
-  const chartOptions: ChartOptions<'line'> = {
+  const chartOptions = {
     responsive: true,
     maintainAspectRatio: false,
     animation: false,
     interaction: { mode: 'nearest', intersect: false },
     scales: {
       x: {
-        type: 'linear',
-        min: SURFACE_BAR, max: +maxP.toFixed(2),
+        type: 'linear', min: SURFACE_BAR, max: +maxP.toFixed(2),
         title: { display: true, text: 'Ambient pressure (bar)', font: { size: 10 } },
         ticks: { font: { size: 9 } },
       },
       y: {
-        type: 'linear',
-        min: 0, max: +yMax.toFixed(2),
+        type: 'linear', min: 0, max: +yMax.toFixed(2),
         title: { display: true, text: 'Inert gas pressure (bar)', font: { size: 10 } },
         ticks: { font: { size: 9 } },
       },
     },
     plugins: {
       legend: {
-        display: true,
-        position: 'right',
+        display: true, position: 'right',
         labels: {
           font: { size: 9 }, boxWidth: 12, padding: 4,
-          filter: (item) => !(item.text ?? '').startsWith('_'),
+          filter: (item: { text?: string }) => !(item.text ?? '').startsWith('_'),
         },
       },
       tooltip: {
-        filter: (item) => (item.dataset.label ?? '').startsWith('C'),
+        filter: (item: { dataset: { label?: string } }) => (item.dataset.label ?? '').startsWith('C'),
         callbacks: {
-          title: (items) => {
+          title: (items: { dataIndex: number }[]) => {
             const pt = pts[items[0].dataIndex]
-            if (!pt) return ''
-            return `t = ${pt.t.toFixed(1)} min · ${pt.d.toFixed(0)} m${pt.c > 0 ? ` · ceil ${pt.c.toFixed(0)} m` : ''}`
+            return pt ? `t = ${pt.t.toFixed(1)} min · ${pt.d.toFixed(0)} m${pt.c > 0 ? ` · ceil ${pt.c.toFixed(0)} m` : ''}` : ''
           },
-          label: (item) => {
+          label: (item: { dataset: { label?: string }; dataIndex: number }) => {
             const ci = parseInt((item.dataset.label ?? '').slice(1)) - 1
             const pt = pts[item.dataIndex]
             if (!pt || isNaN(ci)) return ''
@@ -658,16 +667,26 @@ function MvaluePressureDiagram({ profilePoints, gfHigh, maxDepthM }: {
           },
         },
       },
+      zoom: {
+        zoom: { wheel: { enabled: true, speed: 0.1 }, pinch: { enabled: true }, mode: 'xy' as const },
+        pan: { enabled: true, mode: 'xy' as const },
+      },
     },
-  }
+  } satisfies ChartOptions<'line'>
+
+  const chartHeight = isFullscreen ? 'calc(100vh - 200px)' : 450
 
   return (
     <div>
-      <div style={{ height: 450, position: 'relative' }}>
-        <Line data={chartData} options={chartOptions} />
+      <div style={{ height: chartHeight, position: 'relative' }}>
+        <Line ref={chartRef} data={chartData} options={chartOptions} />
       </div>
-      <div style={{ fontSize: '0.7rem', color: '#aaa', marginTop: 4, textAlign: 'center' }}>
-        M-value lines use N₂ ZHL-16C coefficients · paths show pN₂+pHe per compartment vs ambient pressure through the dive
+      <div className="d-flex justify-content-between align-items-center mt-1">
+        <div style={{ fontSize: '0.7rem', color: '#aaa' }}>
+          M-value lines use N₂ ZHL-16C coefficients · paths trace pN₂+pHe vs ambient pressure through the dive
+        </div>
+        <button className="btn btn-link btn-sm text-secondary p-0" style={{ fontSize: '0.75rem' }}
+          onClick={() => (chartRef.current as any)?.resetZoom()}>Reset zoom</button>
       </div>
     </div>
   )
