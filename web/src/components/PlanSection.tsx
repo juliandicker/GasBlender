@@ -502,8 +502,10 @@ function MvalueDiagram({ profilePoints, isFullscreen }: {
 
   const compColor = (i: number) => `hsl(${Math.round(i / 15 * 220)}, 65%, 42%)`
 
+  // Default: show every other compartment to reduce initial clutter; user clicks legend to toggle
   const tissueDatasets = Array.from({ length: 16 }, (_, i) => ({
     label: `C${i + 1} (${N2_HALF_TIMES[i]} min)`,
+    hidden: i % 2 !== 0,
     data: pts.map(p => ({ x: p.t, y: +(p.inert![i][0] + p.inert![i][1]).toFixed(4) })),
     showLine: true, pointRadius: 0, fill: false, tension: 0.15,
     borderColor: compColor(i),
@@ -532,7 +534,11 @@ function MvalueDiagram({ profilePoints, isFullscreen }: {
       },
     },
     plugins: {
-      legend: { display: true, position: 'right', labels: { font: { size: 9 }, boxWidth: 12, padding: 4 } },
+      legend: {
+        display: true, position: 'right',
+        labels: { font: { size: 9 }, boxWidth: 12, padding: 4 },
+        title: { display: true, text: 'click to toggle', color: '#aaa', font: { size: 8, style: 'italic' } },
+      },
       tooltip: {
         callbacks: {
           title: (items: { dataIndex: number }[]) => {
@@ -612,8 +618,10 @@ function MvaluePressureDiagram({ profilePoints, gfHigh, maxDepthM, isFullscreen 
     borderColor: 'rgba(40,160,80,0.65)', borderWidth: 1.5, borderDash: [6, 4],
   }
 
+  // Default: show every other compartment; user toggles via legend click
   const tissueDatasets = Array.from({ length: 16 }, (_, i) => ({
     label: `C${i + 1} (${N2_HALF_TIMES[i]} min)`,
+    hidden: i % 2 !== 0,
     data: pts.map(p => ({ x: p.d / 10 + SURFACE_BAR, y: +(p.inert![i][0] + p.inert![i][1]).toFixed(4) })),
     showLine: true, pointRadius: 0, fill: false, tension: 0,
     borderColor: compColor(i),
@@ -646,9 +654,26 @@ function MvaluePressureDiagram({ profilePoints, gfHigh, maxDepthM, isFullscreen 
     plugins: {
       legend: {
         display: true, position: 'right',
+        title: { display: true, text: 'click to toggle', color: '#aaa', font: { size: 8, style: 'italic' } },
         labels: {
           font: { size: 9 }, boxWidth: 12, padding: 4,
           filter: (item: { text?: string }) => !(item.text ?? '').startsWith('_'),
+        },
+        // Clicking "M-value" or "GF-High" toggles all 16 lines in that group
+        onClick: (_e: unknown, legendItem: any, legend: any) => {
+          const chart = legend.chart
+          const label: string = legendItem.text ?? ''
+          const idx: number = legendItem.datasetIndex ?? 0
+          if (label === 'M-value') {
+            const vis = !chart.isDatasetVisible(0)
+            for (let i = 0; i < 16; i++) chart.setDatasetVisibility(i, vis)
+          } else if (label.startsWith('GF-High')) {
+            const vis = !chart.isDatasetVisible(16)
+            for (let i = 16; i < 32; i++) chart.setDatasetVisibility(i, vis)
+          } else {
+            chart.setDatasetVisibility(idx, !chart.isDatasetVisible(idx))
+          }
+          chart.update()
         },
       },
       tooltip: {
