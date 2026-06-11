@@ -253,18 +253,13 @@ export default function PlanSection({
                         <td style={{ fontSize: '0.78rem' }}>{gasName(bigO2, bigHe)}</td>
                       </tr>
                     )}
-                    {/* Deco gas switches (bailout only) */}
-                    {gasSwitches.map((sw, i) => (
-                      <tr key={`sw${i}`} style={{ background: '#f0f8ff' }}>
-                        <td className="ps-2"><i className="bi bi-arrow-repeat" style={{ color: 'var(--aqua)' }} /></td>
-                        <td>{sw.depth_m} m</td>
-                        <td>—</td><td>—</td><td>—</td><td>—</td>
-                        <td style={{ fontSize: '0.78rem', color: 'var(--ocean)', fontWeight: 700 }}>→ {sw.label}</td>
-                      </tr>
-                    ))}
-                    {/* Deco stops */}
+                    {/* Deco stops — thick top border marks a gas switch above */}
                     {decoStops.map((stop, i) => {
                       const isLast = i === decoStops.length - 1
+                      const prevDepth = i === 0 ? Infinity : decoStops[i - 1].depth_m
+                      const switchAbove = gasSwitches.some(
+                        sw => sw.depth_m >= stop.depth_m && sw.depth_m < prevDepth
+                      )
                       const gasAtStop = resolveGasAtStop(stop.depth_m, gasSwitches, bailoutInitialGas ?? gas)
                       const dens = (surfaceDensity(gasAtStop.o2, gasAtStop.he) * (stop.depth_m / 10 + 1)).toFixed(2)
                       const densNum = parseFloat(dens)
@@ -273,7 +268,7 @@ export default function PlanSection({
                         ? ((gasAtStop.o2 / 100) * (stop.depth_m / 10 + 1)).toFixed(2)
                         : sp.toFixed(2)
                       return (
-                        <tr key={i}>
+                        <tr key={i} style={switchAbove ? { borderTop: '2px solid #495057' } : {}}>
                           <td className="ps-2">
                             <i className="bi bi-arrow-up-circle"
                               style={{ color: isLast ? '#198754' : '#e07000' }} />
