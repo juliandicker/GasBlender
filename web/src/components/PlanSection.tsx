@@ -609,7 +609,7 @@ function MvaluePressureDiagram({ profilePoints, gfHigh, maxDepthM, isFullscreen 
   // visibility coupled to the tissue path via legend onClick below.
   const mvalueDatasets = ZHL16C_AB.map(([a, b], i) => ({
     label: '_',
-    hidden: i % 2 !== 0,
+    hidden: false,
     data: [{ x: SURFACE_BAR, y: mLine(a, b, SURFACE_BAR) }, { x: maxP, y: mLine(a, b, maxP) }],
     showLine: true, pointRadius: 0, fill: false, tension: 0,
     borderColor: compColor(i, 0.3), borderWidth: 1, borderDash: [4, 3],
@@ -617,7 +617,7 @@ function MvaluePressureDiagram({ profilePoints, gfHigh, maxDepthM, isFullscreen 
 
   const gfDatasets = ZHL16C_AB.map(([a, b], i) => ({
     label: '_',
-    hidden: i % 2 !== 0,
+    hidden: false,
     data: [{ x: SURFACE_BAR, y: gfLine(a, b, SURFACE_BAR) }, { x: maxP, y: gfLine(a, b, maxP) }],
     showLine: true, pointRadius: 0, fill: false, tension: 0,
     borderColor: compColor(i, 0.55), borderWidth: 1, borderDash: [2, 2],
@@ -633,7 +633,7 @@ function MvaluePressureDiagram({ profilePoints, gfHigh, maxDepthM, isFullscreen 
   // Tissue paths — dataset order: 0-15 mvalue, 16-31 gf, 32 diag, 33-48 tissue
   const tissueDatasets = Array.from({ length: 16 }, (_, i) => ({
     label: `C${i + 1} (${N2_HALF_TIMES[i]} min)`,
-    hidden: i % 2 !== 0,
+    hidden: false,
     data: pts.map(p => ({ x: p.d / 10 + SURFACE_BAR, y: +(p.inert![i][0] + p.inert![i][1]).toFixed(4) })),
     showLine: true, pointRadius: 0, fill: false, tension: 0,
     borderColor: compColor(i), borderWidth: 1.5,
