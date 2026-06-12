@@ -391,15 +391,40 @@ def _plan_ccr(req, gf_low, gf_high, oc_gases, oc_gas_volumes):
     warnings: List[Warning] = []
 
     diluent_ppo2 = (req.diluent_o2 / 100.0) * (req.depth_m / 10.0 + 1.0)
-    if diluent_ppo2 > req.setpoint + 0.05:
-        level = 'danger' if diluent_ppo2 > 1.6 else 'warning'
+
+    # Control-authority: loop can't hold setpoint (only fires when ppo2 is below 1.6 so the
+    # message isn't confused with the oxtox danger below)
+    floor_fires = diluent_ppo2 > req.setpoint + 0.05 and diluent_ppo2 <= 1.6
+    if floor_fires:
         warnings.append(Warning(
-            level=level,
+            level='warning',
             message=(
                 f'Diluent ppO₂ at {req.depth_m:.0f} m is {diluent_ppo2:.2f} bar — '
                 f'exceeds setpoint ({req.setpoint:.2f} bar). '
                 f'The CCR cannot reduce ppO₂ below the diluent floor; '
                 f'actual ppO₂ at depth will be {diluent_ppo2:.2f} bar.'
+            ),
+        ))
+
+    # Flush/bailout breathability: independent of setpoint — catches the case where a high
+    # setpoint masks a diluent that is unsafe to flush or bail out on at depth
+    if diluent_ppo2 > 1.6:
+        warnings.append(Warning(
+            level='danger',
+            message=(
+                f'Diluent {diluent_label} at {req.depth_m:.0f} m: '
+                f'ppO₂ {diluent_ppo2:.2f} bar exceeds the absolute maximum (1.6 bar). '
+                f'Unsafe to flush the loop or bail out on this diluent at this depth — '
+                f'CNS O₂ toxicity risk.'
+            ),
+        ))
+    elif not floor_fires and diluent_ppo2 > 1.4:
+        warnings.append(Warning(
+            level='warning',
+            message=(
+                f'Diluent {diluent_label} at {req.depth_m:.0f} m: '
+                f'ppO₂ {diluent_ppo2:.2f} bar exceeds the 1.4 bar working limit. '
+                f'Safe in normal CCR operation but approach diluent flushes and OC bailout with caution.'
             ),
         ))
     if density_gl > 6.3:
