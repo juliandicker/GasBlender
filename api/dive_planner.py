@@ -1,6 +1,6 @@
 import logging
 import math
-from typing import List, Optional
+from typing import List, Optional, Tuple
 
 from fastapi import APIRouter, HTTPException
 
@@ -171,31 +171,26 @@ def _build_gas_supply(profile, sorted_gases, sorted_volumes, req) -> Optional[Li
     return supply
 
 
-# ── OC planning path ───────────────────────────────────────────────────────────
-
-def _plan_oc(req, gf_low, gf_high, oc_gases, oc_gas_volumes):
+def _prepare_oc_gas_supply(oc_gases, oc_gas_volumes, reserve_bar):
     sorted_gases = sorted(oc_gases, key=lambda g: g.mod_m)
     sorted_volumes = sorted(zip(oc_gases, oc_gas_volumes), key=lambda x: x[0].mod_m)
     available_L = [
-        (v['cyl_l'] * max(0.0, v['cyl_bar'] - req.reserve_bar))
+        (v['cyl_l'] * max(0.0, v['cyl_bar'] - reserve_bar))
         if (v['cyl_l'] and v['cyl_bar']) else math.inf
         for _, v in sorted_volumes
     ]
+    return sorted_gases, sorted_volumes, available_L
 
-    bottom_time_actual = req.bottom_time_min
+
+def _run_gas_constrained_bottom_time(planner_fn, req, sorted_gases, sorted_volumes, available_L, prefix='Gas'):
+    bottom_time_actual    = req.bottom_time_min
     bottom_time_shortened = False
-    gas_infeasible = False
-    gas_infeasible_msg = None
+    infeasible            = False
+    infeasible_msg        = None
 
     if any(a < math.inf for a in available_L):
         result_bt, shortened = _binary_search_bottom_time(
-            planner_fn=lambda bt: plan_oc_dive(
-                oc_gases, req.depth_m, bt, gf_low, gf_high,
-                desc_rate_mpm=req.desc_rate_mpm,
-                asc_rate_deep_mpm=req.asc_rate_deep_mpm,
-                asc_rate_shallow_mpm=req.asc_rate_shallow_mpm,
-                last_stop_m=req.last_stop_m,
-            ),
+            planner_fn=planner_fn,
             depth_m=req.depth_m,
             requested_bt=req.bottom_time_min,
             desc_rate_mpm=req.desc_rate_mpm,
@@ -205,10 +200,79 @@ def _plan_oc(req, gf_low, gf_high, oc_gases, oc_gas_volumes):
             sac_deco=req.sac_deco_lpm,
         )
         if result_bt is None:
-            gas_infeasible = True
-            gas_infeasible_msg = _infeasibility_msg(sorted_volumes, req.reserve_bar, req.depth_m, prefix='Gas')
+            infeasible = True
+            infeasible_msg = _infeasibility_msg(sorted_volumes, req.reserve_bar, req.depth_m, prefix=prefix)
         else:
             bottom_time_actual, bottom_time_shortened = result_bt, shortened
+
+    return bottom_time_actual, bottom_time_shortened, infeasible, infeasible_msg
+
+
+def _append_cns_warning(warnings, cns_pct, cns_warn_pct) -> None:
+    if cns_pct >= cns_warn_pct:
+        warnings.append(Warning(
+            level='warning',
+            message=f'CNS O₂ toxicity is {cns_pct:.1f}% — exceeds the warning threshold of {cns_warn_pct:.0f}%.',
+        ))
+
+
+def _build_bailout_plan(
+    gas, req, sorted_gases, sorted_volumes, bottom_time_actual, bailout_gf_low, bailout_gf_high,
+) -> Tuple[Optional[BailoutPlan], Optional[str]]:
+    try:
+        bailout = plan_oc_bailout(
+            ccr_gas=gas,
+            bottom_depth_m=req.depth_m,
+            bottom_time_min=bottom_time_actual,
+            desc_rate_mpm=req.desc_rate_mpm,
+            bailout_gases=sorted_gases,
+            gf_low=bailout_gf_low,
+            gf_high=bailout_gf_high,
+            asc_rate_deep_mpm=req.asc_rate_deep_mpm,
+            asc_rate_shallow_mpm=req.asc_rate_shallow_mpm,
+            last_stop_m=req.last_stop_m,
+        )
+        oc_cns, oc_otu = _oc_cns_otu(bailout, sorted_gases)
+        loop_cns = _cns_rate(req.setpoint) * bottom_time_actual
+        loop_otu = _otu_rate(req.setpoint) * bottom_time_actual
+        bailout_supply = _build_gas_supply(bailout, sorted_gases, sorted_volumes, req)
+        return BailoutPlan(
+            stops=_build_deco_stops(bailout.stops),
+            total_time_min=bailout.total_time_min,
+            tts_min=round(max(0.0, bailout.total_time_min - bottom_time_actual), 1),
+            cns_pct=round(loop_cns + oc_cns, 1),
+            otu=round(loop_otu + oc_otu, 1),
+            gas_switches=[GasSwitch(depth_m=gs['depth_m'], label=gs['label']) for gs in bailout.gas_switches],
+            profile_points=_build_profile_points(bailout.profile_points),
+            tissue_saturations=bailout.tissue_saturations,
+            gas_supply=bailout_supply,
+        ), None
+    except Exception as e:
+        logging.exception("Bailout planning error")
+        return None, str(e)
+
+
+# ── OC planning path ───────────────────────────────────────────────────────────
+
+def _plan_oc(req, gf_low, gf_high, oc_gases, oc_gas_volumes):
+    sorted_gases, sorted_volumes, available_L = _prepare_oc_gas_supply(oc_gases, oc_gas_volumes, req.reserve_bar)
+
+    bottom_time_actual, bottom_time_shortened, gas_infeasible, gas_infeasible_msg = (
+        _run_gas_constrained_bottom_time(
+            planner_fn=lambda bt: plan_oc_dive(
+                oc_gases, req.depth_m, bt, gf_low, gf_high,
+                desc_rate_mpm=req.desc_rate_mpm,
+                asc_rate_deep_mpm=req.asc_rate_deep_mpm,
+                asc_rate_shallow_mpm=req.asc_rate_shallow_mpm,
+                last_stop_m=req.last_stop_m,
+            ),
+            req=req,
+            sorted_gases=sorted_gases,
+            sorted_volumes=sorted_volumes,
+            available_L=available_L,
+            prefix='Gas',
+        )
+    )
 
     try:
         profile = plan_oc_dive(
@@ -248,14 +312,7 @@ def _plan_oc(req, gf_low, gf_high, oc_gases, oc_gas_volumes):
     cns_pct = round(oc_cns, 1)
     otu     = round(oc_otu, 1)
 
-    if cns_pct >= req.cns_warn_pct:
-        warnings.append(Warning(
-            level='warning',
-            message=(
-                f'CNS O₂ toxicity is {cns_pct:.1f}% — '
-                f'exceeds the warning threshold of {req.cns_warn_pct:.0f}%.'
-            ),
-        ))
+    _append_cns_warning(warnings, cns_pct, req.cns_warn_pct)
 
     gas_supply = _build_gas_supply(profile, sorted_gases, sorted_volumes, req) if not gas_infeasible else None
 
@@ -294,15 +351,9 @@ def _plan_ccr(req, gf_low, gf_high, oc_gases, oc_gas_volumes):
     bailout_infeasible_msg = None
 
     if oc_gases:
-        sorted_gases = sorted(oc_gases, key=lambda g: g.mod_m)
-        sorted_volumes = sorted(zip(oc_gases, oc_gas_volumes), key=lambda x: x[0].mod_m)
-        available_L = [
-            (v['cyl_l'] * max(0.0, v['cyl_bar'] - req.reserve_bar))
-            if (v['cyl_l'] and v['cyl_bar']) else math.inf
-            for _, v in sorted_volumes
-        ]
-        if any(a < math.inf for a in available_L):
-            result_bt, shortened = _binary_search_bottom_time(
+        sorted_gases, sorted_volumes, available_L = _prepare_oc_gas_supply(oc_gases, oc_gas_volumes, req.reserve_bar)
+        bottom_time_actual, bottom_time_shortened, bailout_infeasible, bailout_infeasible_msg = (
+            _run_gas_constrained_bottom_time(
                 planner_fn=lambda bt: plan_oc_bailout(
                     ccr_gas=gas,
                     bottom_depth_m=req.depth_m,
@@ -315,19 +366,13 @@ def _plan_ccr(req, gf_low, gf_high, oc_gases, oc_gas_volumes):
                     asc_rate_shallow_mpm=req.asc_rate_shallow_mpm,
                     last_stop_m=req.last_stop_m,
                 ),
-                depth_m=req.depth_m,
-                requested_bt=req.bottom_time_min,
-                desc_rate_mpm=req.desc_rate_mpm,
+                req=req,
                 sorted_gases=sorted_gases,
+                sorted_volumes=sorted_volumes,
                 available_L=available_L,
-                sac_bottom=req.sac_bottom_lpm,
-                sac_deco=req.sac_deco_lpm,
+                prefix='Bailout gas',
             )
-            if result_bt is None:
-                bailout_infeasible = True
-                bailout_infeasible_msg = _infeasibility_msg(sorted_volumes, req.reserve_bar, req.depth_m, prefix='Bailout gas')
-            else:
-                bottom_time_actual, bottom_time_shortened = result_bt, shortened
+        )
 
     try:
         profile = plan_ccr_dive(
@@ -341,7 +386,8 @@ def _plan_ccr(req, gf_low, gf_high, oc_gases, oc_gas_volumes):
         logging.exception("CCR planning error")
         raise HTTPException(status_code=500, detail=str(e))
 
-    density_gl = gas_density(req.diluent_o2, req.diluent_he, req.depth_m)
+    density_gl    = gas_density(req.diluent_o2, req.diluent_he, req.depth_m)
+    diluent_label = OpenCircuitGas(req.diluent_o2, req.diluent_he, req.depth_m).label
     warnings: List[Warning] = []
 
     diluent_ppo2 = (req.diluent_o2 / 100.0) * (req.depth_m / 10.0 + 1.0)
@@ -360,8 +406,8 @@ def _plan_ccr(req, gf_low, gf_high, oc_gases, oc_gas_volumes):
         warnings.append(Warning(
             level='danger',
             message=(
-                f'Gas density exceeds the BSAC upper limit '
-                f'({density_gl:.2f} g/L — limit 6.3 g/L). '
+                f'Diluent {diluent_label} at {req.depth_m:.0f} m: '
+                f'gas density {density_gl:.2f} g/L exceeds the upper limit (6.3 g/L). '
                 f'This diluent is not safe to breathe at this depth.'
             ),
         ))
@@ -369,8 +415,8 @@ def _plan_ccr(req, gf_low, gf_high, oc_gases, oc_gas_volumes):
         warnings.append(Warning(
             level='warning',
             message=(
-                f'Gas density exceeds the BSAC recommended limit '
-                f'({density_gl:.2f} g/L — recommended ≤5.2 g/L). '
+                f'Diluent {diluent_label} at {req.depth_m:.0f} m: '
+                f'gas density {density_gl:.2f} g/L exceeds the recommended limit (5.2 g/L). '
                 f'Increased work of breathing and CO₂ retention risk.'
             ),
         ))
@@ -391,14 +437,7 @@ def _plan_ccr(req, gf_low, gf_high, oc_gases, oc_gas_volumes):
     cns_pct   = round(_cns_rate(_eff_ppo2) * bottom_time_actual + _cns_rate(req.setpoint) * tts_min, 1)
     otu       = round(_otu_rate(_eff_ppo2) * bottom_time_actual + _otu_rate(req.setpoint) * tts_min, 1)
 
-    if cns_pct >= req.cns_warn_pct:
-        warnings.append(Warning(
-            level='warning',
-            message=(
-                f'CNS O₂ toxicity is {cns_pct:.1f}% — '
-                f'exceeds the warning threshold of {req.cns_warn_pct:.0f}%.'
-            ),
-        ))
+    _append_cns_warning(warnings, cns_pct, req.cns_warn_pct)
 
     if oc_gases:
         warnings.extend(_gas_warnings(
@@ -409,46 +448,11 @@ def _plan_ccr(req, gf_low, gf_high, oc_gases, oc_gas_volumes):
 
     bailout_plan: Optional[BailoutPlan] = None
     if oc_gases and not bailout_infeasible:
-        try:
-            sorted_gases_asc  = sorted(oc_gases, key=lambda g: g.mod_m)
-            sorted_oc_volumes = sorted(zip(oc_gases, oc_gas_volumes), key=lambda x: x[0].mod_m)
-            bailout = plan_oc_bailout(
-                ccr_gas=gas,
-                bottom_depth_m=req.depth_m,
-                bottom_time_min=bottom_time_actual,
-                desc_rate_mpm=req.desc_rate_mpm,
-                bailout_gases=oc_gases,
-                gf_low=bailout_gf_low,
-                gf_high=bailout_gf_high,
-                asc_rate_deep_mpm=req.asc_rate_deep_mpm,
-                asc_rate_shallow_mpm=req.asc_rate_shallow_mpm,
-                last_stop_m=req.last_stop_m,
-            )
-            oc_cns, oc_otu = _oc_cns_otu(bailout, sorted_gases_asc)
-            loop_cns = _cns_rate(req.setpoint) * bottom_time_actual
-            loop_otu = _otu_rate(req.setpoint) * bottom_time_actual
-            bailout_cns = round(loop_cns + oc_cns, 1)
-            bailout_otu = round(loop_otu + oc_otu, 1)
-
-            bailout_supply = _build_gas_supply(bailout, sorted_gases_asc, sorted_oc_volumes, req)
-
-            bailout_plan = BailoutPlan(
-                stops=_build_deco_stops(bailout.stops),
-                total_time_min=bailout.total_time_min,
-                tts_min=round(max(0.0, bailout.total_time_min - bottom_time_actual), 1),
-                cns_pct=bailout_cns,
-                otu=bailout_otu,
-                gas_switches=[
-                    GasSwitch(depth_m=gs['depth_m'], label=gs['label'])
-                    for gs in bailout.gas_switches
-                ],
-                profile_points=_build_profile_points(bailout.profile_points),
-                tissue_saturations=bailout.tissue_saturations,
-                gas_supply=bailout_supply,
-            )
-        except Exception as e:
-            logging.exception("Bailout planning error")
-            warnings.append(Warning(level='warning', message=f'Bailout plan could not be computed: {e}'))
+        bailout_plan, bailout_error = _build_bailout_plan(
+            gas, req, sorted_gases, sorted_volumes, bottom_time_actual, bailout_gf_low, bailout_gf_high,
+        )
+        if bailout_error:
+            warnings.append(Warning(level='warning', message=f'Bailout plan could not be computed: {bailout_error}'))
 
     return DivePlannerResponse(
         stops=_build_deco_stops(profile.stops),
