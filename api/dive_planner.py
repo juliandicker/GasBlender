@@ -134,9 +134,105 @@ def _gas_warnings(
                 message=(
                     f'{gas_type} {label} at {use_depth:.0f} m: '
                     f'gas density {d:.2f} g/L exceeds the recommended limit (5.2 g/L). '
-                    f'Increased work of breathing.'
+                    f'Increased work of breathing and CO₂ retention risk.'
                 ),
             ))
+    return warnings
+
+
+def _build_plan_warnings(
+    req,
+    mode: str,
+    cns_pct: float,
+    gas_infeasible: bool,
+    gas_infeasible_msg,
+    bottom_time_shortened: bool,
+    bottom_time_actual: float,
+    diluent_ppo2: float = None,  # CCR only
+    density_gl: float = None,    # CCR only
+) -> List[Warning]:
+    warnings: List[Warning] = []
+
+    if mode == 'ccr':
+        diluent_label = OpenCircuitGas(req.diluent_o2, req.diluent_he, req.depth_m).label
+
+        floor_fires = diluent_ppo2 > req.setpoint + 0.05 and diluent_ppo2 <= 1.6
+        if floor_fires:
+            warnings.append(Warning(
+                level='warning',
+                message=(
+                    f'Diluent ppO₂ at {req.depth_m:.0f} m is {diluent_ppo2:.2f} bar — '
+                    f'exceeds setpoint ({req.setpoint:.2f} bar). '
+                    f'The CCR cannot reduce ppO₂ below the diluent floor; '
+                    f'actual ppO₂ at depth will be {diluent_ppo2:.2f} bar.'
+                ),
+            ))
+        if diluent_ppo2 > 1.6:
+            warnings.append(Warning(
+                level='danger',
+                message=(
+                    f'Diluent {diluent_label} at {req.depth_m:.0f} m: '
+                    f'ppO₂ {diluent_ppo2:.2f} bar exceeds the absolute maximum (1.6 bar). '
+                    f'Unsafe to flush the loop or bail out on this diluent at this depth — '
+                    f'CNS O₂ toxicity risk.'
+                ),
+            ))
+        elif not floor_fires and diluent_ppo2 > 1.4:
+            warnings.append(Warning(
+                level='warning',
+                message=(
+                    f'Diluent {diluent_label} at {req.depth_m:.0f} m: '
+                    f'ppO₂ {diluent_ppo2:.2f} bar exceeds the 1.4 bar working limit. '
+                    f'Safe in normal CCR operation but approach diluent flushes and OC bailout with caution.'
+                ),
+            ))
+        if density_gl > 6.3:
+            warnings.append(Warning(
+                level='danger',
+                message=(
+                    f'Diluent {diluent_label} at {req.depth_m:.0f} m: '
+                    f'gas density {density_gl:.2f} g/L exceeds the upper limit (6.3 g/L). '
+                    f'This diluent is not safe to breathe at this depth.'
+                ),
+            ))
+        elif density_gl > 5.2:
+            warnings.append(Warning(
+                level='warning',
+                message=(
+                    f'Diluent {diluent_label} at {req.depth_m:.0f} m: '
+                    f'gas density {density_gl:.2f} g/L exceeds the recommended limit (5.2 g/L). '
+                    f'Increased work of breathing and CO₂ retention risk.'
+                ),
+            ))
+
+    supply_phrase = 'insufficient bailout gas supply' if mode == 'ccr' else 'insufficient gas supply'
+    if gas_infeasible:
+        warnings.append(Warning(level='danger', message=gas_infeasible_msg))
+    elif bottom_time_shortened:
+        warnings.append(Warning(
+            level='warning',
+            message=(
+                f'Bottom time shortened from {req.bottom_time_min:.0f} min to {bottom_time_actual:.0f} min '
+                f'— {supply_phrase} for the requested dive time.'
+            ),
+        ))
+
+    if req.bailout_gases:
+        first_gas_type = 'Bailout gas' if mode == 'ccr' else 'Back gas'
+        other_gas_type = 'Bailout gas' if mode == 'ccr' else 'Deco gas'
+        warnings.extend(_gas_warnings(
+            req.bailout_gases, req.depth_m,
+            first_gas_type=first_gas_type,
+            other_gas_type=other_gas_type,
+            skip_first_density=False,
+        ))
+
+    if cns_pct >= req.cns_warn_pct:
+        warnings.append(Warning(
+            level='warning',
+            message=f'CNS O₂ toxicity is {cns_pct:.1f}% — exceeds the warning threshold of {req.cns_warn_pct:.0f}%.',
+        ))
+
     return warnings
 
 
@@ -206,14 +302,6 @@ def _run_gas_constrained_bottom_time(planner_fn, req, sorted_gases, sorted_volum
             bottom_time_actual, bottom_time_shortened = result_bt, shortened
 
     return bottom_time_actual, bottom_time_shortened, infeasible, infeasible_msg
-
-
-def _append_cns_warning(warnings, cns_pct, cns_warn_pct) -> None:
-    if cns_pct >= cns_warn_pct:
-        warnings.append(Warning(
-            level='warning',
-            message=f'CNS O₂ toxicity is {cns_pct:.1f}% — exceeds the warning threshold of {cns_warn_pct:.0f}%.',
-        ))
 
 
 def _build_bailout_plan(
@@ -288,31 +376,17 @@ def _plan_oc(req, gf_low, gf_high, oc_gases, oc_gas_volumes):
 
     bottom_gas_input = max(req.bailout_gases, key=lambda g: g.mod_m)
     density_gl = gas_density(bottom_gas_input.o2, bottom_gas_input.he, req.depth_m)
-    warnings: List[Warning] = []
-
-    if gas_infeasible:
-        warnings.append(Warning(level='danger', message=gas_infeasible_msg))
-    elif bottom_time_shortened:
-        warnings.append(Warning(
-            level='warning',
-            message=(
-                f'Bottom time shortened from {req.bottom_time_min:.0f} min to {bottom_time_actual:.0f} min '
-                f'— insufficient gas supply for the requested dive time.'
-            ),
-        ))
-
-    warnings.extend(_gas_warnings(
-        req.bailout_gases, req.depth_m,
-        first_gas_type='Back gas', other_gas_type='Deco gas',
-        skip_first_density=False,
-    ))
 
     tts_min = round(max(0.0, profile.total_time_min - bottom_time_actual), 1)
     oc_cns, oc_otu = _oc_cns_otu(profile, sorted_gases)
     cns_pct = round(oc_cns, 1)
     otu     = round(oc_otu, 1)
 
-    _append_cns_warning(warnings, cns_pct, req.cns_warn_pct)
+    warnings = _build_plan_warnings(
+        req, 'oc', cns_pct,
+        gas_infeasible, gas_infeasible_msg,
+        bottom_time_shortened, bottom_time_actual,
+    )
 
     gas_supply = _build_gas_supply(profile, sorted_gases, sorted_volumes, req) if not gas_infeasible else None
 
@@ -386,90 +460,21 @@ def _plan_ccr(req, gf_low, gf_high, oc_gases, oc_gas_volumes):
         logging.exception("CCR planning error")
         raise HTTPException(status_code=500, detail=str(e))
 
-    density_gl    = gas_density(req.diluent_o2, req.diluent_he, req.depth_m)
-    diluent_label = OpenCircuitGas(req.diluent_o2, req.diluent_he, req.depth_m).label
-    warnings: List[Warning] = []
-
+    density_gl   = gas_density(req.diluent_o2, req.diluent_he, req.depth_m)
     diluent_ppo2 = (req.diluent_o2 / 100.0) * (req.depth_m / 10.0 + 1.0)
-
-    # Control-authority: loop can't hold setpoint (only fires when ppo2 is below 1.6 so the
-    # message isn't confused with the oxtox danger below)
-    floor_fires = diluent_ppo2 > req.setpoint + 0.05 and diluent_ppo2 <= 1.6
-    if floor_fires:
-        warnings.append(Warning(
-            level='warning',
-            message=(
-                f'Diluent ppO₂ at {req.depth_m:.0f} m is {diluent_ppo2:.2f} bar — '
-                f'exceeds setpoint ({req.setpoint:.2f} bar). '
-                f'The CCR cannot reduce ppO₂ below the diluent floor; '
-                f'actual ppO₂ at depth will be {diluent_ppo2:.2f} bar.'
-            ),
-        ))
-
-    # Flush/bailout breathability: independent of setpoint — catches the case where a high
-    # setpoint masks a diluent that is unsafe to flush or bail out on at depth
-    if diluent_ppo2 > 1.6:
-        warnings.append(Warning(
-            level='danger',
-            message=(
-                f'Diluent {diluent_label} at {req.depth_m:.0f} m: '
-                f'ppO₂ {diluent_ppo2:.2f} bar exceeds the absolute maximum (1.6 bar). '
-                f'Unsafe to flush the loop or bail out on this diluent at this depth — '
-                f'CNS O₂ toxicity risk.'
-            ),
-        ))
-    elif not floor_fires and diluent_ppo2 > 1.4:
-        warnings.append(Warning(
-            level='warning',
-            message=(
-                f'Diluent {diluent_label} at {req.depth_m:.0f} m: '
-                f'ppO₂ {diluent_ppo2:.2f} bar exceeds the 1.4 bar working limit. '
-                f'Safe in normal CCR operation but approach diluent flushes and OC bailout with caution.'
-            ),
-        ))
-    if density_gl > 6.3:
-        warnings.append(Warning(
-            level='danger',
-            message=(
-                f'Diluent {diluent_label} at {req.depth_m:.0f} m: '
-                f'gas density {density_gl:.2f} g/L exceeds the upper limit (6.3 g/L). '
-                f'This diluent is not safe to breathe at this depth.'
-            ),
-        ))
-    elif density_gl > 5.2:
-        warnings.append(Warning(
-            level='warning',
-            message=(
-                f'Diluent {diluent_label} at {req.depth_m:.0f} m: '
-                f'gas density {density_gl:.2f} g/L exceeds the recommended limit (5.2 g/L). '
-                f'Increased work of breathing and CO₂ retention risk.'
-            ),
-        ))
-
-    if bailout_infeasible:
-        warnings.append(Warning(level='danger', message=bailout_infeasible_msg))
-    elif bottom_time_shortened:
-        warnings.append(Warning(
-            level='warning',
-            message=(
-                f'Bottom time shortened from {req.bottom_time_min:.0f} min to {bottom_time_actual:.0f} min '
-                f'— insufficient bailout gas supply for the requested dive time.'
-            ),
-        ))
 
     tts_min   = round(max(0.0, profile.total_time_min - bottom_time_actual), 1)
     _eff_ppo2 = max(req.setpoint, diluent_ppo2)
     cns_pct   = round(_cns_rate(_eff_ppo2) * bottom_time_actual + _cns_rate(req.setpoint) * tts_min, 1)
     otu       = round(_otu_rate(_eff_ppo2) * bottom_time_actual + _otu_rate(req.setpoint) * tts_min, 1)
 
-    _append_cns_warning(warnings, cns_pct, req.cns_warn_pct)
-
-    if oc_gases:
-        warnings.extend(_gas_warnings(
-            req.bailout_gases, req.depth_m,
-            first_gas_type='Bailout gas', other_gas_type='Bailout gas',
-            skip_first_density=False,
-        ))
+    warnings = _build_plan_warnings(
+        req, 'ccr', cns_pct,
+        bailout_infeasible, bailout_infeasible_msg,
+        bottom_time_shortened, bottom_time_actual,
+        diluent_ppo2=diluent_ppo2,
+        density_gl=density_gl,
+    )
 
     bailout_plan: Optional[BailoutPlan] = None
     if oc_gases and not bailout_infeasible:
