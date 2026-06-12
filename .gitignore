@@ -44,6 +44,13 @@ __blobstorage__/
 __queuestorage__/
 __azurite_db*__.json
 
+# Node
+web/node_modules/
+node_modules/
+
+# Playwright MCP
+.playwright-mcp/
+
 # VS Code
 
 # Screenshots
