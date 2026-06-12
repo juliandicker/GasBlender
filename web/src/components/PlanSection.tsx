@@ -593,22 +593,30 @@ function MvaluePressureDiagram({ profilePoints, gfHigh, maxDepthM, isFullscreen 
 
   const gf   = gfHigh / 100
   const maxP = Math.max(maxDepthM / 10 + SURFACE_BAR, SURFACE_BAR + 0.5)
-  const compColor = (i: number) => `hsl(${Math.round(i / 15 * 220)}, 65%, 42%)`
+
+  // Color per compartment — same hue for tissue path, M-value, and GF line so they're obviously linked
+  const compHue  = (i: number) => Math.round(i / 15 * 220)
+  const compColor = (i: number, alpha = 1) => `hsla(${compHue(i)}, 65%, 42%, ${alpha})`
+
   const mLine  = (a: number, b: number, x: number) => a + x / b
   const gfLine = (a: number, b: number, x: number) => gf * a + x * (1 + gf * (1 / b - 1))
 
+  // Reference lines: same colour as their compartment, hidden from legend,
+  // visibility coupled to the tissue path via legend onClick below.
   const mvalueDatasets = ZHL16C_AB.map(([a, b], i) => ({
-    label: i === 0 ? 'M-value' : '_',
+    label: '_',
+    hidden: i % 2 !== 0,
     data: [{ x: SURFACE_BAR, y: mLine(a, b, SURFACE_BAR) }, { x: maxP, y: mLine(a, b, maxP) }],
     showLine: true, pointRadius: 0, fill: false, tension: 0,
-    borderColor: 'rgba(180,100,30,0.35)', borderWidth: 1, borderDash: [4, 3],
+    borderColor: compColor(i, 0.3), borderWidth: 1, borderDash: [4, 3],
   }))
 
   const gfDatasets = ZHL16C_AB.map(([a, b], i) => ({
-    label: i === 0 ? `GF-High ${gfHigh}%` : '_',
+    label: '_',
+    hidden: i % 2 !== 0,
     data: [{ x: SURFACE_BAR, y: gfLine(a, b, SURFACE_BAR) }, { x: maxP, y: gfLine(a, b, maxP) }],
     showLine: true, pointRadius: 0, fill: false, tension: 0,
-    borderColor: 'rgba(30,100,200,0.35)', borderWidth: 1, borderDash: [3, 2],
+    borderColor: compColor(i, 0.55), borderWidth: 1, borderDash: [2, 2],
   }))
 
   const diagDataset = {
@@ -618,21 +626,24 @@ function MvaluePressureDiagram({ profilePoints, gfHigh, maxDepthM, isFullscreen 
     borderColor: 'rgba(40,160,80,0.65)', borderWidth: 1.5, borderDash: [6, 4],
   }
 
-  // Default: show every other compartment; user toggles via legend click
+  // Tissue paths — dataset order: 0-15 mvalue, 16-31 gf, 32 diag, 33-48 tissue
   const tissueDatasets = Array.from({ length: 16 }, (_, i) => ({
     label: `C${i + 1} (${N2_HALF_TIMES[i]} min)`,
     hidden: i % 2 !== 0,
     data: pts.map(p => ({ x: p.d / 10 + SURFACE_BAR, y: +(p.inert![i][0] + p.inert![i][1]).toFixed(4) })),
     showLine: true, pointRadius: 0, fill: false, tension: 0,
-    borderColor: compColor(i),
-    borderWidth: 1.5,
+    borderColor: compColor(i), borderWidth: 1.5,
   }))
 
   const maxLoad = Math.max(...pts.flatMap(p => p.inert!.map(([n, h]) => n + h)))
-  const yMax = maxLoad * 1.2
   const chartData = {
     datasets: [...mvalueDatasets, ...gfDatasets, diagDataset, ...tissueDatasets],
   } as unknown as ChartData<'line'>
+
+  // Tooltip dedup: the tissue path crosses back over itself during ascent so the
+  // same compartment can appear twice as "nearest". Track the last seen label
+  // per tooltip render and skip repeats.
+  const tooltipSeen = { label: '' }
 
   const chartOptions = {
     responsive: true,
@@ -646,7 +657,7 @@ function MvaluePressureDiagram({ profilePoints, gfHigh, maxDepthM, isFullscreen 
         ticks: { font: { size: 9 } },
       },
       y: {
-        type: 'linear', min: 0, max: +yMax.toFixed(2),
+        type: 'linear', min: 0, suggestedMax: +(maxLoad * 1.2).toFixed(2),
         title: { display: true, text: 'Inert gas pressure (bar)', font: { size: 10 } },
         ticks: { font: { size: 9 } },
       },
@@ -659,17 +670,16 @@ function MvaluePressureDiagram({ profilePoints, gfHigh, maxDepthM, isFullscreen 
           font: { size: 9 }, boxWidth: 12, padding: 4,
           filter: (item: { text?: string }) => !(item.text ?? '').startsWith('_'),
         },
-        // Clicking "M-value" or "GF-High" toggles all 16 lines in that group
+        // Toggling a tissue compartment also shows/hides its M-value and GF-High lines
         onClick: (_e: unknown, legendItem: any, legend: any) => {
           const chart = legend.chart
-          const label: string = legendItem.text ?? ''
           const idx: number = legendItem.datasetIndex ?? 0
-          if (label === 'M-value') {
-            const vis = !chart.isDatasetVisible(0)
-            for (let i = 0; i < 16; i++) chart.setDatasetVisibility(i, vis)
-          } else if (label.startsWith('GF-High')) {
-            const vis = !chart.isDatasetVisible(16)
-            for (let i = 16; i < 32; i++) chart.setDatasetVisibility(i, vis)
+          const compIdx = idx - 33  // tissue datasets start at 33
+          if (compIdx >= 0 && compIdx < 16) {
+            const vis = !chart.isDatasetVisible(idx)
+            chart.setDatasetVisibility(idx, vis)           // tissue path
+            chart.setDatasetVisibility(compIdx, vis)       // M-value line
+            chart.setDatasetVisibility(16 + compIdx, vis)  // GF-High line
           } else {
             chart.setDatasetVisibility(idx, !chart.isDatasetVisible(idx))
           }
@@ -677,16 +687,20 @@ function MvaluePressureDiagram({ profilePoints, gfHigh, maxDepthM, isFullscreen 
         },
       },
       tooltip: {
-        filter: (item: { dataset: { label?: string } }) => (item.dataset.label ?? '').startsWith('C'),
+        filter: (item: any) => (item.dataset.label ?? '').startsWith('C'),
         callbacks: {
-          title: (items: { dataIndex: number }[]) => {
+          beforeBody: () => { tooltipSeen.label = '' },
+          title: (items: any[]) => {
             const pt = pts[items[0].dataIndex]
             return pt ? `t = ${pt.t.toFixed(1)} min · ${pt.d.toFixed(0)} m${pt.c > 0 ? ` · ceil ${pt.c.toFixed(0)} m` : ''}` : ''
           },
-          label: (item: { dataset: { label?: string }; dataIndex: number }) => {
-            const ci = parseInt((item.dataset.label ?? '').slice(1)) - 1
+          label: (item: any) => {
+            const label: string = item.dataset.label ?? ''
+            if (label === tooltipSeen.label) return undefined as unknown as string
+            tooltipSeen.label = label
+            const ci = parseInt(label.slice(1)) - 1
             const pt = pts[item.dataIndex]
-            if (!pt || isNaN(ci)) return ''
+            if (!pt || isNaN(ci)) return undefined as unknown as string
             const [pn2, phe] = pt.inert![ci]
             return `C${ci + 1}: ${(pn2 + phe).toFixed(3)} bar  (N₂ ${pn2.toFixed(3)}  He ${phe.toFixed(3)})`
           },
@@ -708,7 +722,7 @@ function MvaluePressureDiagram({ profilePoints, gfHigh, maxDepthM, isFullscreen 
       </div>
       <div className="d-flex justify-content-between align-items-center mt-1">
         <div style={{ fontSize: '0.7rem', color: '#aaa' }}>
-          M-value lines use N₂ ZHL-16C coefficients · paths trace pN₂+pHe vs ambient pressure through the dive
+          Each compartment: solid = tissue · long-dashed = M-value · short-dashed = GF-High {gfHigh}%
         </div>
         <button className="btn btn-link btn-sm text-secondary p-0" style={{ fontSize: '0.75rem' }}
           onClick={() => (chartRef.current as any)?.resetZoom()}>Reset zoom</button>
