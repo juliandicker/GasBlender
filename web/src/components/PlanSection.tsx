@@ -494,6 +494,8 @@ function MvalueDiagram({ profilePoints, isFullscreen }: {
   isFullscreen?: boolean
 }) {
   const chartRef = useRef<ChartJS<'line'>>(null)
+  const lockedIdx = useRef<number | null>(null)
+  const preHoverVis = useRef<boolean[]>([])
   const pts = profilePoints.filter(p => p.inert && p.inert.length === 16)
 
   if (pts.length === 0) {
@@ -506,7 +508,6 @@ function MvalueDiagram({ profilePoints, isFullscreen }: {
 
   const compColor = (i: number) => `hsl(${Math.round(i / 15 * 220)}, 65%, 42%)`
 
-  // Default: show every other compartment to reduce initial clutter; user clicks legend to toggle
   const tissueDatasets = Array.from({ length: 16 }, (_, i) => ({
     label: `C${i + 1} (${N2_HALF_TIMES[i]} min)`,
     hidden: false,
@@ -540,8 +541,45 @@ function MvalueDiagram({ profilePoints, isFullscreen }: {
     plugins: {
       legend: {
         display: true, position: 'right',
+        title: { display: true, text: 'hover · click to lock', color: '#aaa', font: { size: 8, style: 'italic' } },
         labels: { font: { size: 9 }, boxWidth: 12, padding: 4 },
-        title: { display: true, text: 'click to toggle', color: '#aaa', font: { size: 8, style: 'italic' } },
+        onHover: (_e: unknown, legendItem: any, legend: any) => {
+          if (lockedIdx.current !== null) return
+          const idx: number = legendItem.datasetIndex ?? 0
+          const chart = legend.chart
+          if (preHoverVis.current.length === 0)
+            preHoverVis.current = chart.data.datasets.map((_: any, i: number) => chart.isDatasetVisible(i))
+          for (let i = 0; i < 16; i++)
+            chart.setDatasetVisibility(i, i === idx)
+          chart.update('none')
+        },
+        onLeave: (_e: unknown, _legendItem: any, legend: any) => {
+          if (lockedIdx.current !== null) return
+          const chart = legend.chart
+          if (preHoverVis.current.length > 0) {
+            preHoverVis.current.forEach((vis, i) => chart.setDatasetVisibility(i, vis))
+            preHoverVis.current = []
+          }
+          chart.update('none')
+        },
+        onClick: (_e: unknown, legendItem: any, legend: any) => {
+          const chart = legend.chart
+          const idx: number = legendItem.datasetIndex ?? 0
+          if (lockedIdx.current === idx) {
+            lockedIdx.current = null
+            if (preHoverVis.current.length > 0) {
+              preHoverVis.current.forEach((vis, i) => chart.setDatasetVisibility(i, vis))
+              preHoverVis.current = []
+            }
+          } else {
+            if (preHoverVis.current.length === 0)
+              preHoverVis.current = chart.data.datasets.map((_: any, i: number) => chart.isDatasetVisible(i))
+            lockedIdx.current = idx
+            for (let i = 0; i < 16; i++)
+              chart.setDatasetVisibility(i, i === idx)
+          }
+          chart.update('none')
+        },
       },
       tooltip: {
         callbacks: {
