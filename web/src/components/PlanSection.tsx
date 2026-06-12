@@ -167,10 +167,13 @@ export default function PlanSection({
           title: (items) => `${Math.round(items[0].parsed.x ?? 0)} min`,
           label: (item) => `${item.dataset.label}: ${(item.parsed.y ?? 0).toFixed(1)} m`,
           afterBody: (items) => {
-            if (!isBailout) return []
             const depth = items[0]?.parsed.y ?? 0
-            const gas = resolveGasAtStop(depth, gasSwitches, bailoutInitialGas ?? diluent)
-            return [`Gas: ${gas.name}`]
+            const baseGas = ocBackGas ?? bailoutInitialGas ?? diluent
+            if (!baseGas && gasSwitches.length === 0) return []
+            const gasAtDepth = resolveGasAtStop(depth, gasSwitches, baseGas)
+            if (isBailout || !!ocBackGas)
+              return [`Gas: ${gasAtDepth.name}`]
+            return [`Gas: ${gasAtDepth.name} · SP ${sp.toFixed(2)}`]
           },
         },
       },
