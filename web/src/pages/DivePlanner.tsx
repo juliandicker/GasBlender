@@ -60,9 +60,12 @@ const DEFAULT_SETTINGS: PlannerSettings = {
   sacBottom: 25, sacDeco: 15, reserveBar: 50,
 }
 const EXAMPLE_PLANS: Omit<SavedPlan, 'id' | 'created_at'>[] = [
-  { name: 'Shallow Reef',  gas: { o2: 21, he: 0,  setpoint: 1.3 }, depth_m: 20, bottom_time_min: 45 },
-  { name: 'Wreck Dive',    gas: { o2: 21, he: 35, setpoint: 1.3 }, depth_m: 40, bottom_time_min: 25 },
-  { name: 'Trimix Dive',   gas: { o2: 16, he: 70, setpoint: 1.3 }, depth_m: 60, bottom_time_min: 20 },
+  { name: 'Shallow Reef', gas: { o2: 21, he: 0,  setpoint: 1.3 }, depth_m: 20, bottom_time_min: 45,
+    bailout_gases: [{ o2: 21, he: 0 }] },
+  { name: 'Wreck Dive',   gas: { o2: 21, he: 35, setpoint: 1.3 }, depth_m: 40, bottom_time_min: 25,
+    bailout_gases: [{ o2: 50, he: 0 }, { o2: 21, he: 25 }] },
+  { name: 'Trimix Dive',  gas: { o2: 16, he: 70, setpoint: 1.3 }, depth_m: 60, bottom_time_min: 20,
+    bailout_gases: [{ o2: 50, he: 0 }, { o2: 20, he: 55 }] },
 ]
 
 function makeGasLibrary(): GasEntry[] {
@@ -421,6 +424,12 @@ export default function DivePlanner() {
       const id = gasNextId
       setGasLib(prev => [...prev.map(x => ({ ...x, active: false })), { id, ...g, active: true }])
       setGasNextId(id + 1)
+    }
+    if (plan.bailout_gases) {
+      const wanted = plan.bailout_gases
+      setBailoutLib(prev => prev.map(b => ({
+        ...b, active: wanted.some(w => w.o2 === b.o2 && w.he === b.he),
+      })))
     }
     setSavedPlansOpen(false)
   }
