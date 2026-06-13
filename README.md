@@ -1,31 +1,38 @@
 # GasBlender
 
-Two tools for technical diving, built on Python Azure Functions and a static HTML frontend hosted on Azure Static Web Apps.
+Three tools for technical diving, built on Python Azure Functions and a React/Vite frontend hosted on Azure Static Web Apps.
 
 | Tool | Description |
 |------|-------------|
 | **Gas Blender** | Trimix fill-sequence calculator — given a start cylinder and target mix, computes He → O₂ → air top-up steps |
-| **Dive Planner** | Bühlmann ZHL-16C CCR decompression planner with GF Low/High, OC bailout planning, gas density analysis, tissue saturation chart, and OTU/CNS tracking |
+| **Dive Planner** | Bühlmann ZHL-16C CCR/OC decompression planner with GF Low/High, OC bailout planning, travel-gas descent logic for hypoxic back gases, gas density analysis, tissue saturation chart, and OTU/CNS tracking |
+| **Dive Simulator** | Teaching aid — plays back a planned profile as a Shearwater-style dive computer animation with tissue loading, ppO₂, CNS%, and gas display |
 
 ## Project structure
 
 ```
 GasBlender/
-├── function_app.py         # ASGI entry point — FastAPI app, Pydantic models, both endpoints
+├── function_app.py         # ASGI entry point — mounts FastAPI app, registers api/ routers
+├── api/
+│   ├── dive_planner.py           # DivePlanner endpoint: CCR and OC planning paths
+│   ├── dive_planner_models.py    # Pydantic request/response models
+│   ├── dive_planner_builders.py  # build_profile_points, build_deco_stops, build_gas_supply
+│   ├── dive_planner_warnings.py  # PlanWarnings: density, CNS, supply, bailout warnings
+│   └── trimix.py                 # TrimixBlend endpoint
 ├── DivePlanner/
 │   └── __init__.py         # Helper module: CNS/OTU rates, gas consumption, binary search
 ├── planner/
 │   ├── buhlmann.py         # ZHL-16C model: Schreiner equation, GF ceiling, tissue saturations
-│   ├── dive.py             # CCR dive planner + OC bailout: descent, deco grid, profile points
+│   ├── dive.py             # CCR + OC dive planner: descent, deco, travel-gas logic, gas per profile point
 │   └── gas.py              # CCRGas / OpenCircuitGas: pp_n2 / pp_he for each circuit type
 ├── tests/
 │   ├── test_gas_blender.py          # 28 gas blender tests
 │   ├── test_buhlmann.py             # Bühlmann model unit tests
 │   ├── test_planner.py              # Dive planner integration tests
-│   ├── ovm_reference.py             # OVM CCR reference data (Playwright-recorded)
-│   ├── test_ovm_crossval.py         # OVM CCR cross-validation
-│   ├── ovm_bailout_reference.py     # OVM OC bailout reference data (Playwright-recorded)
-│   ├── test_ovm_bailout_crossval.py # OVM OC bailout cross-validation
+│   ├── test_oc_gas_selection.py     # 28 OC gas selection tests (travel gas, floor depth, window test)
+│   ├── test_dive_planner_warnings.py # 47 warning-generation tests
+│   ├── ovm_reference.py / test_ovm_crossval.py          # OVM CCR cross-validation
+│   ├── ovm_bailout_reference.py / test_ovm_bailout_crossval.py # OVM OC bailout cross-validation
 │   └── test_openapi.py              # OpenAPI schema generation tests
 ├── infra/
 │   ├── main.bicep          # Subscription-scoped Bicep — resource group + all resources
@@ -33,8 +40,8 @@ GasBlender/
 │   └── modules/            # storage, functionApp, staticWebApp, swa-domain, dns
 ├── web/                    # React/Vite frontend (TypeScript)
 │   ├── src/
-│   │   ├── pages/          # GasBlender.tsx, DivePlanner.tsx
-│   │   ├── components/     # Header, GasBar, PlanSection (charts + schedule)
+│   │   ├── pages/          # GasBlender.tsx, DivePlanner.tsx, DiveSimulator.tsx, About.tsx
+│   │   ├── components/     # Header, GasBar, PlanSection, DiveComputerDisplay, GFPresets, LoadingSpinner
 │   │   ├── api.ts          # API client — auto-detects local vs prod URL
 │   │   ├── utils.ts        # Gas calculations (density, best mix, naming)
 │   │   └── types.ts        # TypeScript types for API and app state
@@ -110,7 +117,7 @@ The CI pipeline also exports `openapi.json` as a build artifact on every push to
 }
 ```
 
-Returns deco stops, total runtime, dive profile points (depth + ceiling + tissue saturations), gas density analysis, TTS, CNS%, and OTU. Optional fields include ascent/descent rates, last stop depth (3/4/5/6/9 m), CNS warning threshold, SAC rates, bailout gases with cylinder sizes, and per-gas supply analysis. See `/docs` for the full schema.
+Returns deco stops, total runtime, dive profile points (depth + ceiling + tissue saturations + gas breathed at each point), gas density analysis, TTS, CNS%, OTU, and (for OC dives with hypoxic back gas) a `travel_gas` descriptor for the descent switch. Optional fields include ascent/descent rates, last stop depth (3/4/5/6/9 m), CNS warning threshold, SAC rates, bailout gases with cylinder sizes, and per-gas supply analysis. See `/docs` for the full schema.
 
 ## Running locally
 
@@ -126,7 +133,7 @@ cd web && npm run dev    # Vite dev server on :8080
 
 ```bash
 pip install -r requirements-dev.txt
-pytest tests/ -v   # 225 tests
+pytest tests/ -v   # 312 tests
 ```
 
 ## Gas blending logic

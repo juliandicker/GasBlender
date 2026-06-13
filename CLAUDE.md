@@ -2,39 +2,59 @@
 
 ## Project overview
 
-Two tools for technical diving. Python Azure Functions API (FastAPI + ASGI) + React/Vite frontend hosted on Azure Static Web Apps (Free tier).
+Three tools for technical diving. Python Azure Functions API (FastAPI + ASGI) + React/Vite frontend hosted on Azure Static Web Apps (Free tier).
 
 - **Gas Blender** — fill-sequence calculator: He → O₂ → air top-up steps
-- **Dive Planner** — Bühlmann ZHL-16C CCR decompression planner with GF Low/High, gas density analysis, tissue saturation tracking, OTU/CNS
+- **Dive Planner** — Bühlmann ZHL-16C CCR/OC decompression planner with GF Low/High, OC bailout planning, travel-gas descent logic for hypoxic back gases, gas density analysis, tissue saturation tracking, OTU/CNS
+- **Dive Simulator** — teaching aid that plays back a planned profile as a Shearwater-style dive computer animation
 
 ## Structure
 
 ```
 GasBlender/
-├── function_app.py           # ASGI entry point — FastAPI app, Pydantic models, both endpoints
+├── function_app.py           # ASGI entry point — mounts FastAPI app, registers api/ routers
+├── api/
+│   ├── dive_planner.py       # DivePlanner endpoint: CCR and OC planning paths
+│   ├── dive_planner_models.py # Pydantic request/response models
+│   ├── dive_planner_builders.py # build_profile_points, build_deco_stops, build_gas_supply
+│   ├── dive_planner_warnings.py # PlanWarnings: density, CNS, supply, bailout warnings
+│   └── trimix.py             # TrimixBlend endpoint
 ├── DivePlanner/__init__.py   # Helper module: CNS/OTU rates, gas consumption, binary search (tests import from here)
 ├── planner/
 │   ├── buhlmann.py           # ZHL-16C: Schreiner equation, GF ceiling, tissue saturations
-│   ├── dive.py               # CCR dive planner + OC bailout: descent, deco grid, profile points
+│   ├── dive.py               # CCR + OC dive planner: descent, deco grid, profile points, travel-gas logic
 │   └── gas.py                # CCRGas / OpenCircuitGas: pp_n2 / pp_he for each circuit type
-├── tests/                    # Unit tests (pytest) — 225 tests total
+├── tests/                    # Unit tests (pytest) — 312 tests total
+│   ├── test_gas_blender.py          # 28 blending tests
+│   ├── test_buhlmann.py             # Bühlmann model tests
+│   ├── test_planner.py              # Dive planner integration tests
+│   ├── test_oc_gas_selection.py     # 28 OC gas selection tests (travel gas, floor depth, window test)
+│   ├── test_dive_planner_warnings.py # 47 warning-generation tests
+│   ├── ovm_reference.py / test_ovm_crossval.py          # OVM CCR cross-validation
+│   ├── ovm_bailout_reference.py / test_ovm_bailout_crossval.py # OVM OC bailout cross-validation
+│   └── test_openapi.py              # OpenAPI schema generation tests
 ├── gas_blender.py            # Core blending logic — single source of truth
 ├── web/                      # React/Vite frontend (TypeScript)
 │   ├── src/
 │   │   ├── main.tsx          # React entry point
-│   │   ├── App.tsx           # React Router — / and /planner
+│   │   ├── App.tsx           # React Router — /, /planner, /simulator, /about
 │   │   ├── styles.css        # Global CSS (CSS variables, shared components)
 │   │   ├── types.ts          # TypeScript types for API and app state
 │   │   ├── api.ts            # API client (auto-detects local vs prod URL)
 │   │   ├── utils.ts          # Gas calculations (density, best mix, gas naming)
 │   │   ├── storage.ts        # localStorage helpers
 │   │   ├── components/
-│   │   │   ├── Header.tsx    # App header with nav offcanvas
-│   │   │   ├── GasBar.tsx    # Gas composition bar component
-│   │   │   └── PlanSection.tsx # Profile+tissue charts, schedule table, metrics
+│   │   │   ├── Header.tsx           # App header with nav offcanvas
+│   │   │   ├── GasBar.tsx           # Gas composition bar component
+│   │   │   ├── PlanSection.tsx      # Profile+tissue charts, schedule table, metrics
+│   │   │   ├── DiveComputerDisplay.tsx # Shearwater-style dive computer frame
+│   │   │   ├── GFPresets.tsx        # GF Low/High preset picker
+│   │   │   └── LoadingSpinner.tsx   # Spinner overlay
 │   │   └── pages/
-│   │       ├── GasBlender.tsx  # Gas Blender page (/)
-│   │       └── DivePlanner.tsx # Dive Planner page (/planner)
+│   │       ├── GasBlender.tsx    # Gas Blender page (/)
+│   │       ├── DivePlanner.tsx   # Dive Planner page (/planner)
+│   │       ├── DiveSimulator.tsx # Dive computer simulator (/simulator)
+│   │       └── About.tsx         # About page (/about)
 │   ├── public/
 │   │   ├── diver.jpg
 │   │   ├── redkic_diving_tools_logo.png
@@ -82,7 +102,7 @@ cd web && npm run dev                 # Vite dev server on :8080
 pip install -r requirements-dev.txt
 pytest tests/ -v
 ```
-225 tests: 28 covering `Gas`, `BlendStep`, `TrimixBlend`, `topup_blend`; 3 covering OpenAPI schema generation; the rest cover the Bühlmann model, CCR dive planner, OVM CCR cross-validation, and OVM OC bailout cross-validation.
+312 tests: 28 gas blender; 3 OpenAPI schema; 47 warning generation; 28 OC gas selection (travel gas, floor depth, window test); the rest cover the Bühlmann model, CCR dive planner, OVM CCR cross-validation, and OVM OC bailout cross-validation.
 
 ## Pre-approved permissions
 
@@ -101,9 +121,10 @@ The following are already in the allowlists (`.claude/settings.json` and `.claud
 
 ## Conventions
 
-- **Single source of truth**: all gas blending logic lives in `gas_blender.py`; all decompression logic lives in `planner/`. `function_app.py` only handles HTTP contract (parsing, validation, response shaping) and calls into those modules.
-- **Warnings belong in the API**: all safety warnings (ppO₂ floor, gas density) are generated in `function_app.py` and returned as a `warnings` array (`[{level, message}]`). The frontend (and any future client) only renders them — no warning logic in the UI.
-- **FastAPI + Pydantic v2** for the HTTP layer: Pydantic models in `function_app.py` are the contract. Cross-field validation (GF ordering, bottom-time vs descent-time) uses `@model_validator`. Plain-text error responses are preserved for frontend compatibility via custom exception handlers.
+- **Single source of truth**: all gas blending logic lives in `gas_blender.py`; all decompression logic lives in `planner/`. The `api/` module only handles the HTTP contract (parsing, validation, response shaping) and calls into those modules.
+- **Gas per profile point**: every `ProfilePoint` in the API response carries `gas_o2` and `gas_he` — the gas breathed at that moment, computed by the planner. The frontend reads these directly; it does not re-implement gas-selection rules.
+- **Warnings belong in the API**: all safety warnings (ppO₂ floor, gas density) are generated in `api/dive_planner_warnings.py` and returned as a `warnings` array (`[{level, message}]`). The frontend only renders them — no warning logic in the UI.
+- **FastAPI + Pydantic v2** for the HTTP layer: Pydantic models in `api/dive_planner_models.py` are the contract. Cross-field validation (GF ordering, bottom-time vs descent-time) uses `@model_validator`. Plain-text error responses are preserved for frontend compatibility via custom exception handlers.
 - **Snake_case** for functions (`topup_blend`), PascalCase for classes (`Gas`, `TrimixBlend`, `BlendStep`, Pydantic models).
 - **No comments** unless the why is non-obvious.
 - **Pinned dependencies** in `requirements.txt` (`azure-functions==1.24.0`, `fastapi>=0.115.0`, `pydantic>=2.0.0`).
