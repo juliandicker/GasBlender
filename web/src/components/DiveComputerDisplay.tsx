@@ -148,47 +148,25 @@ const DiveComputerDisplay = React.memo(function DiveComputerDisplay({
         </div>
       </div>
 
-      {/* ── Mode + Gas boxes ─────────────────────────────── */}
-      <div style={{ padding: '0.3rem 0.65rem', borderBottom: `1px solid ${DIVIDER}`, display: 'flex', gap: '0.5rem', alignItems: 'flex-end' }}>
+      {/* ── Mode · Gas · NDL ─────────────────────────────── */}
+      <div style={{ padding: '0.3rem 0.65rem 0.4rem', borderBottom: `1px solid ${DIVIDER}`, display: 'flex', gap: '1rem', alignItems: 'flex-end' }}>
         <div>
           <Label>MODE</Label>
-          <div style={{
-            display: 'inline-block',
-            padding: '0.15rem 0.55rem',
-            border: `1px solid ${BLUE}`,
-            borderRadius: 4,
-            fontSize: '1.0rem',
-            fontWeight: 700,
-            letterSpacing: '0.04em',
-            color: BLUE,
-          }}>
+          <div style={{ fontSize: '1.0rem', fontWeight: 700, letterSpacing: '0.04em', color: BLUE }}>
             {modeLabel}
           </div>
         </div>
         <div>
           <Label>GAS</Label>
-          <div style={{
-            display: 'inline-block',
-            padding: '0.15rem 0.55rem',
-            border: `1px solid rgba(255,255,255,0.25)`,
-            borderRadius: 4,
-            fontSize: '1.0rem',
-            fontWeight: 700,
-            letterSpacing: '0.04em',
-            color: WHITE,
-          }}>
+          <div style={{ fontSize: '1.0rem', fontWeight: 700, letterSpacing: '0.04em', color: WHITE }}>
             {gas}
           </div>
         </div>
-      </div>
-
-      {/* ── NDL ──────────────────────────────────────────── */}
-      <div style={{ padding: '0.1rem 0.65rem 0' }}>
-        <Label>NDL</Label>
-      </div>
-      <div style={{ padding: '0 0.65rem 0.4rem', borderBottom: `1px solid ${DIVIDER}` }}>
-        <div style={{ fontSize: '1.05rem', fontWeight: 700, color: inDeco ? DIM : '#ffd700' }}>
-          {inDeco ? '0' : Math.round(ndl)}
+        <div>
+          <Label>NDL</Label>
+          <div style={{ fontSize: '1.0rem', fontWeight: 700, color: inDeco ? DIM : '#ffd700' }}>
+            {inDeco ? '0' : Math.round(ndl)}
+          </div>
         </div>
       </div>
 
