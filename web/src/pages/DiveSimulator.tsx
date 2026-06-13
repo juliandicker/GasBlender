@@ -469,16 +469,6 @@ export default function DiveSimulator() {
                     {fmtTime(frame.currentTime)} / {fmtTime(totalTime)}
                   </span>
                 </div>
-
-                <input
-                  type="range"
-                  className="form-range mt-2"
-                  min={0}
-                  max={totalTime}
-                  step={totalTime / 1000}
-                  value={frame.currentTime}
-                  onChange={e => scrubTo(parseFloat(e.target.value))}
-                />
               </div>
             </div>
           </div>
