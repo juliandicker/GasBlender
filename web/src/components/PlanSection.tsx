@@ -169,13 +169,14 @@ export default function PlanSection({
           title: (items) => `${Math.round(items[0].parsed.x ?? 0)} min`,
           label: (item) => `${item.dataset.label}: ${(item.parsed.y ?? 0).toFixed(1)} m`,
           afterBody: (items) => {
-            const depth = items[0]?.parsed.y ?? 0
-            const baseGas = ocBackGas ?? bailoutInitialGas ?? diluent
-            if (!baseGas && gasSwitches.length === 0) return []
-            const gasAtDepth = resolveGasAtStop(depth, gasSwitches, baseGas)
+            const t = items[0]?.parsed.x ?? 0
+            const nearest = profilePoints.reduce((a, b) =>
+              Math.abs(b.t - t) < Math.abs(a.t - t) ? b : a, profilePoints[0])
+            if (!nearest || nearest.gas_o2 == null) return []
+            const label = gasName(nearest.gas_o2, nearest.gas_he ?? 0)
             if (isBailout || !!ocBackGas)
-              return [`Gas: ${gasAtDepth.name}`]
-            return [`Gas: ${gasAtDepth.name} · SP ${sp.toFixed(2)}`]
+              return [`Gas: ${label}`]
+            return [`Gas: ${label} · SP ${sp.toFixed(2)}`]
           },
         },
       },
