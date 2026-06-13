@@ -32,12 +32,6 @@ function tissueColor(pct: number): string {
   return 'rgba(32,150,130,0.9)'
 }
 
-function ppO2Color(v: number): string {
-  if (v < 0.18) return '#4dabf7'
-  if (v > 1.6)  return 'rgba(220,53,69,1)'
-  if (v > 1.4)  return 'rgba(255,140,0,1)'
-  return 'rgba(32,150,130,1)'
-}
 
 function Label({ children }: { children: React.ReactNode }) {
   return (
@@ -73,7 +67,7 @@ const DiveComputerDisplay = React.memo(function DiveComputerDisplay({
       {/* ── Row 1: DEPTH · TIME · STOP · STIME · TTS ────── */}
       <div style={{
         display: 'grid',
-        gridTemplateColumns: '1.3fr 0.8fr 0.9fr 0.75fr 0.75fr',
+        gridTemplateColumns: '1.3fr 0.8fr 0.9fr 0.75fr',
         padding: '0.5rem 0.65rem 0.45rem',
         columnGap: '0.3rem',
         borderBottom: `1px solid ${DIVIDER}`,
@@ -102,12 +96,6 @@ const DiveComputerDisplay = React.memo(function DiveComputerDisplay({
             {inDeco ? stopTime : '---'}
           </div>
         </div>
-        <div>
-          <Label>TTS</Label>
-          <div style={{ fontSize: '1.25rem', fontWeight: 700, color: WHITE, lineHeight: 1 }}>
-            {Math.round(tts)}
-          </div>
-        </div>
       </div>
 
       {/* ── Row 2: CNS/OTU · PPO₂ · CEIL ───────────────── */}
@@ -134,7 +122,7 @@ const DiveComputerDisplay = React.memo(function DiveComputerDisplay({
         {/* Center: PPO₂ */}
         <div style={{ textAlign: 'center' }}>
           <Label>PPO₂</Label>
-          <div style={{ fontSize: '2.3rem', fontWeight: 700, color: ppO2Color(ppO2), lineHeight: 1 }}>
+          <div style={{ fontSize: '2.3rem', fontWeight: 700, color: WHITE, lineHeight: 1 }}>
             {ppO2.toFixed(2)}
           </div>
         </div>
@@ -148,7 +136,7 @@ const DiveComputerDisplay = React.memo(function DiveComputerDisplay({
         </div>
       </div>
 
-      {/* ── Mode · Gas · NDL ─────────────────────────────── */}
+      {/* ── Mode · Gas · NDL · TTS ───────────────────────── */}
       <div style={{ padding: '0.3rem 0.65rem 0.4rem', borderBottom: `1px solid ${DIVIDER}`, display: 'flex', gap: '1rem', alignItems: 'flex-end' }}>
         <div>
           <Label>MODE</Label>
@@ -164,8 +152,14 @@ const DiveComputerDisplay = React.memo(function DiveComputerDisplay({
         </div>
         <div>
           <Label>NDL</Label>
-          <div style={{ fontSize: '1.0rem', fontWeight: 700, color: inDeco ? DIM : '#ffd700' }}>
+          <div style={{ fontSize: '1.0rem', fontWeight: 700, color: inDeco ? DIM : (ndl < 5 ? '#ffd700' : WHITE) }}>
             {inDeco ? '0' : Math.round(ndl)}
+          </div>
+        </div>
+        <div>
+          <Label>TTS</Label>
+          <div style={{ fontSize: '1.0rem', fontWeight: 700, color: WHITE }}>
+            {Math.round(tts)}
           </div>
         </div>
       </div>
