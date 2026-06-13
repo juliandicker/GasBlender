@@ -257,7 +257,10 @@ export default function DiveSimulator() {
 
   if (!simInput) return null
 
-  const tts = Math.max(0, totalTime - frame.currentTime)
+  const ASCENT_RATE = 10 // m/min
+  const tts = frame.ceiling > 0
+    ? Math.max(0, totalTime - frame.currentTime)
+    : Math.ceil(frame.depth / ASCENT_RATE)
   const ndl = Math.max(0, ndlExpiry - frame.currentTime)
 
   function fmtTime(t: number): string {
