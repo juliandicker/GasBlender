@@ -349,6 +349,7 @@ export default function DivePlanner() {
       state: {
         mode: diveMode,
         profile_points: result.profile_points,
+        stops: result.stops,
         depth_m: depth,
         bottom_time_min: btActual,
         setpoint: diveMode === 'ccr' ? activeGas?.setpoint : undefined,
@@ -356,6 +357,9 @@ export default function DivePlanner() {
         diluent_he: diveMode === 'ccr' ? activeGas?.he : undefined,
         gas_switches: result.gas_switches ?? [],
         bailout_gases: effectiveBailout.map(g => ({ o2: g.o2, he: g.he, mod_m: g.mod_m })),
+        asc_rate_deep_mpm: settings.ascRateDeep,
+        asc_rate_shallow_mpm: settings.ascRateShallow,
+        last_stop_m: settings.lastStopM,
       } satisfies SimulatorInput,
     })
   }

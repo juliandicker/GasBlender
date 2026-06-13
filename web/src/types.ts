@@ -82,6 +82,7 @@ export interface SavedPlan {
 export interface SimulatorInput {
   mode: 'ccr' | 'oc'
   profile_points: ProfilePoint[]
+  stops: DecoStop[]
   depth_m: number
   bottom_time_min: number
   setpoint?: number
@@ -89,4 +90,7 @@ export interface SimulatorInput {
   diluent_he?: number
   gas_switches: GasSwitch[]
   bailout_gases: { o2: number; he: number; mod_m: number }[]
+  asc_rate_deep_mpm: number
+  asc_rate_shallow_mpm: number
+  last_stop_m: number
 }

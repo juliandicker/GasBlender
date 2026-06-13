@@ -260,8 +260,34 @@ export default function DiveSimulator() {
 
   if (!simInput) return null
 
-  const tts = frame.tts
+  const inDeco = frame.ceiling > 0
   const ndl = Math.max(0, ndlExpiry - frame.currentTime)
+
+  // TTS: simple ascent time when no deco obligation; remaining plan time when in deco
+  const displayTts = (() => {
+    if (!inDeco) {
+      const d = frame.depth
+      if (d <= 0) return 0
+      const shallow = Math.min(d, 6)
+      const deep = Math.max(0, d - 6)
+      return deep / simInput.asc_rate_deep_mpm + shallow / simInput.asc_rate_shallow_mpm
+    }
+    return frame.tts
+  })()
+
+  // STOP depth: raw ceiling rounded up to next 3 m grid
+  const stopDepth = inDeco ? Math.ceil(frame.ceiling / 3) * 3 : 0
+
+  // STOP time: remaining time at the current/next stop
+  const nextStop = simInput.stops.find(s => s.runtime_min > frame.currentTime) ?? null
+  const stopTime = (() => {
+    if (!inDeco || !nextStop) return 0
+    const stopStart = nextStop.runtime_min - nextStop.time_min
+    if (frame.currentTime >= stopStart) {
+      return Math.ceil(Math.max(0, nextStop.runtime_min - frame.currentTime))
+    }
+    return Math.ceil(nextStop.time_min)
+  })()
 
   const gasLabel = (() => {
     if (simInput.mode === 'ccr') return `CCR ${simInput.diluent_o2 ?? 21}/${simInput.diluent_he ?? 0}`
@@ -315,12 +341,14 @@ export default function DiveSimulator() {
               ppO2={frame.ppO2}
               cns={frame.cns}
               otu={frame.otu}
-              tts={tts}
+              tts={displayTts}
               ndl={ndl}
               sats={frame.sats}
               mode={simInput.mode}
               setpoint={simInput.setpoint}
               gasLabel={gasLabel}
+              stopDepth={stopDepth}
+              stopTime={stopTime}
             />
           </div>
         </div>

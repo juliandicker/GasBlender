@@ -13,6 +13,8 @@ interface Props {
   mode: 'ccr' | 'oc'
   setpoint?: number
   gasLabel?: string
+  stopDepth: number
+  stopTime: number
 }
 
 // ── Constants ──────────────────────────────────────────────────────────────────
@@ -37,15 +39,6 @@ function ppO2Color(v: number): string {
   return 'rgba(32,150,130,1)'
 }
 
-function formatElapsed(minutes: number): string {
-  const s = Math.floor(minutes * 60)
-  const h = Math.floor(s / 3600)
-  const m = Math.floor((s % 3600) / 60)
-  const ss = s % 60
-  if (h > 0) return `${h}:${String(m).padStart(2,'0')}:${String(ss).padStart(2,'0')}`
-  return `${String(m).padStart(2,'0')}:${String(ss).padStart(2,'0')}`
-}
-
 function Label({ children }: { children: React.ReactNode }) {
   return (
     <div style={{ fontSize: '0.48rem', color: BLUE, letterSpacing: '0.12em', textTransform: 'uppercase', marginBottom: 1 }}>
@@ -57,6 +50,7 @@ function Label({ children }: { children: React.ReactNode }) {
 // ── Component ──────────────────────────────────────────────────────────────────
 const DiveComputerDisplay = React.memo(function DiveComputerDisplay({
   depth, elapsed, ceiling, ppO2, cns, otu, tts, ndl, sats, mode, setpoint, gasLabel,
+  stopDepth, stopTime,
 }: Props) {
   const inDeco = ceiling > 0
   const gas = gasLabel ?? (mode === 'ccr' ? `CCR SP ${(setpoint ?? 1.3).toFixed(1)}` : 'OC')
@@ -75,10 +69,10 @@ const DiveComputerDisplay = React.memo(function DiveComputerDisplay({
       userSelect: 'none',
     }}>
 
-      {/* ── Row 1: DEPTH · TIME · STOP · TTS ───────────── */}
+      {/* ── Row 1: DEPTH · TIME · STOP · STIME · TTS ────── */}
       <div style={{
         display: 'grid',
-        gridTemplateColumns: '1.3fr 1fr 1fr 0.8fr',
+        gridTemplateColumns: '1.3fr 0.8fr 0.9fr 0.75fr 0.75fr',
         padding: '0.5rem 0.65rem 0.45rem',
         columnGap: '0.3rem',
         borderBottom: `1px solid ${DIVIDER}`,
@@ -92,13 +86,19 @@ const DiveComputerDisplay = React.memo(function DiveComputerDisplay({
         <div>
           <Label>TIME</Label>
           <div style={{ fontSize: '1.25rem', fontWeight: 700, color: WHITE, lineHeight: 1 }}>
-            {formatElapsed(elapsed)}
+            {Math.floor(elapsed)}
           </div>
         </div>
         <div>
           <Label>STOP</Label>
           <div style={{ fontSize: '1.25rem', fontWeight: 700, lineHeight: 1, color: inDeco ? 'rgba(220,53,69,1)' : DIM }}>
-            {inDeco ? `${ceiling.toFixed(0)} m` : '---'}
+            {inDeco ? `${stopDepth} m` : '---'}
+          </div>
+        </div>
+        <div>
+          <Label>S.TIME</Label>
+          <div style={{ fontSize: '1.25rem', fontWeight: 700, lineHeight: 1, color: inDeco ? 'rgba(220,53,69,1)' : DIM }}>
+            {inDeco ? stopTime : '---'}
           </div>
         </div>
         <div>
@@ -147,30 +147,31 @@ const DiveComputerDisplay = React.memo(function DiveComputerDisplay({
         </div>
       </div>
 
-      {/* ── Row 3: gas · NDL · TTS labels ───────────────── */}
-      <div style={{
-        display: 'grid',
-        gridTemplateColumns: '1.4fr 1fr 0.8fr',
-        padding: '0.1rem 0.65rem 0',
-        columnGap: '0.3rem',
-      }}>
-        <Label>O₂ / HE</Label>
-        <Label>NDL</Label>
-        <Label>TTS</Label>
-      </div>
-      <div style={{
-        display: 'grid',
-        gridTemplateColumns: '1.4fr 1fr 0.8fr',
-        padding: '0 0.65rem 0.4rem',
-        columnGap: '0.3rem',
-        borderBottom: `1px solid ${DIVIDER}`,
-        alignItems: 'baseline',
-      }}>
-        <div style={{ fontSize: '1.05rem', fontWeight: 700, letterSpacing: '0.02em' }}>{gas}</div>
-        <div style={{ fontSize: '1.05rem', fontWeight: 700, color: inDeco ? 'rgba(220,53,69,1)' : '#ffd700' }}>
-          {inDeco ? `${ceiling.toFixed(0)} m` : Math.round(ndl)}
+      {/* ── Gas box ──────────────────────────────────────── */}
+      <div style={{ padding: '0.3rem 0.65rem', borderBottom: `1px solid ${DIVIDER}` }}>
+        <Label>GAS</Label>
+        <div style={{
+          display: 'inline-block',
+          padding: '0.15rem 0.55rem',
+          border: `1px solid ${BLUE}`,
+          borderRadius: 4,
+          fontSize: '1.0rem',
+          fontWeight: 700,
+          letterSpacing: '0.04em',
+          color: WHITE,
+        }}>
+          {gas}
         </div>
-        <div style={{ fontSize: '1.05rem', fontWeight: 700 }}>{Math.round(tts)}</div>
+      </div>
+
+      {/* ── NDL ──────────────────────────────────────────── */}
+      <div style={{ padding: '0.1rem 0.65rem 0' }}>
+        <Label>NDL</Label>
+      </div>
+      <div style={{ padding: '0 0.65rem 0.4rem', borderBottom: `1px solid ${DIVIDER}` }}>
+        <div style={{ fontSize: '1.05rem', fontWeight: 700, color: inDeco ? DIM : '#ffd700' }}>
+          {inDeco ? '0' : Math.round(ndl)}
+        </div>
       </div>
 
       {/* ── Tissue bars (vertical, matching planner) ─────── */}
